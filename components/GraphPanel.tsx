@@ -17,13 +17,11 @@ interface GraphPanelProps {
   simTime: number;
 }
 
-const MAX_HISTORY = 2000;
-const MIN_VISIBLE_POINTS = 20;
+const MAX_POINTS = 100;
 
 export const GraphPanel: React.FC<GraphPanelProps> = ({ graphs, components, onRemoveGraph, isSimulating, simTime }) => {
   // Store history per component: Record<componentId, points[]>
   const [data, setData] = useState<Record<string, { time: number, voltage?: number, current?: number }[]>>({});
-  const [visiblePoints, setVisiblePoints] = useState(100);
   const lastUpdateRef = useRef(0);
 
   useEffect(() => {
@@ -37,9 +35,9 @@ export const GraphPanel: React.FC<GraphPanelProps> = ({ graphs, components, onRe
       const next = { ...prev };
       
       // Identify active components that have at least one graph
-      const activeComponentIds = new Set<string>(graphs.map(g => g.componentId));
+      const activeComponentIds = new Set(graphs.map(g => g.componentId));
 
-      activeComponentIds.forEach((compId: string) => {
+      activeComponentIds.forEach(compId => {
         const comp = components.find(c => c.id === compId);
         if (!comp) return;
 
@@ -51,7 +49,7 @@ export const GraphPanel: React.FC<GraphPanelProps> = ({ graphs, components, onRe
         };
         
         const newPoints = [...points, newPoint];
-        if (newPoints.length > MAX_HISTORY) newPoints.shift();
+        if (newPoints.length > MAX_POINTS) newPoints.shift();
         next[compId] = newPoints;
       });
       
@@ -59,36 +57,21 @@ export const GraphPanel: React.FC<GraphPanelProps> = ({ graphs, components, onRe
     });
   }, [isSimulating, simTime, graphs, components]);
 
-  const handleWheel = (e: React.WheelEvent) => {
-      e.stopPropagation();
-      const delta = e.deltaY > 0 ? 10 : -10;
-      setVisiblePoints(prev => {
-          const next = prev + delta;
-          if (next < MIN_VISIBLE_POINTS) return MIN_VISIBLE_POINTS;
-          if (next > MAX_HISTORY) return MAX_HISTORY;
-          return next;
-      });
-  };
-
   // Group graphs by component
-  const groupedGraphs = graphs.reduce((acc: Record<string, GraphConfig[]>, g) => {
+  const groupedGraphs = graphs.reduce((acc, g) => {
       if (!acc[g.componentId]) acc[g.componentId] = [];
       acc[g.componentId].push(g);
       return acc;
-  }, {});
+  }, {} as Record<string, GraphConfig[]>);
 
   if (graphs.length === 0) return null;
 
   return (
-    <div 
-        className="absolute bottom-0 left-0 right-0 h-48 bg-[#1a1a1a] border-t border-zinc-700 flex overflow-x-auto z-30"
-        onWheel={handleWheel}
-    >
-      {Object.entries(groupedGraphs).map(([compId, componentGraphs]: [string, GraphConfig[]]) => {
+    <div className="absolute bottom-0 left-0 right-0 h-48 bg-[#1a1a1a] border-t border-zinc-700 flex overflow-x-auto z-30">
+      {Object.entries(groupedGraphs).map(([compId, componentGraphs]) => {
         const comp = components.find(c => c.id === compId);
         const name = comp ? (comp.props.name || comp.type) : 'Unknown';
-        const allPoints = data[compId] || [];
-        const points = allPoints.slice(-visiblePoints);
+        const points = data[compId] || [];
         
         const hasVoltage = componentGraphs.some(g => g.type === 'voltage');
         const hasCurrent = componentGraphs.some(g => g.type === 'current');
