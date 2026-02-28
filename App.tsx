@@ -2,22 +2,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   ComponentType, ComponentModel, WireModel, ViewState, 
-  Port, ComponentProps, AppSettings, THEME, GRID_STEP, Theme
+  Port, ComponentProps, AppSettings, THEME, GRID_STEP
 } from './types';
 import { rotatePoint, findSmartPath, distPointToSegment, findIntersection } from './utils/geometry';
-import { formatUnit } from './utils/formatting';
 import { Sidebar } from './components/Sidebar';
 import { PropertiesPanel } from './components/PropertiesPanel';
 import { CircuitCanvas, CircuitCanvasHandle } from './components/CircuitCanvas';
 import { CircuitSolver } from './services/Solver';
-import { jsPDF } from "jspdf";
-import jspdfAutotable from 'jspdf-autotable';
-import { GraphPanel } from './components/GraphPanel';
 
 const VISUAL_SPEEDS = [0, 1, 5, 10, 100, 1000, 5000, 20000];
 
 const App: React.FC = () => {
-  // ... existing loadInitialState ...
   const loadInitialState = (key: string, def: any) => {
     const saved = localStorage.getItem(key);
     if (!saved) return def;
@@ -47,11 +42,6 @@ const App: React.FC = () => {
   const canvasRef = useRef<CircuitCanvasHandle>(null);
   const [showProperties, setShowProperties] = useState(false);
   const [statusMsg, setStatusMsg] = useState("Ready.");
-
-  // Context Menu & Graphs
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, id: string } | null>(null);
-  const [editPanel, setEditPanel] = useState<{ x: number, y: number, id: string } | null>(null);
-  const [graphs, setGraphs] = useState<{ id: string, componentId: string, type: 'voltage' | 'current', color: string }[]>([]);
 
   const [history, setHistory] = useState<{components: ComponentModel[], wires: WireModel[]}[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -606,295 +596,11 @@ const App: React.FC = () => {
       return () => window.removeEventListener('keydown', handleKeyDown);
   }, [deleteSelectedWithHistory, rotateSelectedWithHistory, isSimulating, undo, redo]);
 
-  const handleExport = () => {
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      
-      // 1. Title
-      doc.setFontSize(22);
-      doc.setTextColor(40, 40, 40);
-      doc.text("OhmicCAD Circuit Report", 14, 20);
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 26);
-
-      // 2. Schematic Image (White Background)
-      const LIGHT_THEME: Theme = {
-          bg: '#ffffff',
-          gridMajor: '#e0e0e0',
-          gridMinor: '#f0f0f0',
-          accent: '#ff9d00',
-          selected: '#000000',
-          wire: '#000000',
-          wireSelected: '#000000',
-          componentStroke: '#000000',
-          componentFill: '#ffffff',
-          text: '#000000',
-          textSecondary: '#444444',
-          background: '#ffffff'
-      };
-
-      const schematicDataUrl = canvasRef.current?.exportSchematic(LIGHT_THEME);
-      let finalY = 30;
-
-      if (schematicDataUrl) {
-          const imgProps = doc.getImageProperties(schematicDataUrl);
-          const imgWidth = pageWidth - 28;
-          const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-          
-          // Limit height to 40% of page
-          const maxHeight = pageHeight * 0.4;
-          let finalWidth = imgWidth;
-          let finalHeight = imgHeight;
-          
-          if (finalHeight > maxHeight) {
-              finalHeight = maxHeight;
-              finalWidth = (imgProps.width * finalHeight) / imgProps.height;
-          }
-          
-          doc.addImage(schematicDataUrl, 'PNG', 14, 35, finalWidth, finalHeight);
-          finalY = 35 + finalHeight + 10;
-      }
-
-      // 3. Circuit Statistics
-      doc.setFontSize(14);
-      doc.setTextColor(0, 0, 0);
-      doc.text("Simulation Statistics", 14, finalY);
-      
-      jspdfAutotable(doc, {
-          startY: finalY + 5,
-          head: [['Metric', 'Value']],
-          body: [
-              ['Simulation Time', `${simTime.toFixed(6)} s`],
-              ['Time Step (dt)', `${((1/1000) * appSettings.timeStepMultiplier).toExponential(2)} s`],
-              ['Total Components', components.length.toString()],
-              ['Total Wires', wires.length.toString()],
-              ['Junctions', components.filter(c => c.type === ComponentType.Junction).length.toString()]
-          ],
-          theme: 'striped',
-          headStyles: { fillColor: [60, 60, 60] },
-          styles: { fontSize: 10, cellPadding: 3 },
-          columnStyles: { 0: { fontStyle: 'bold', width: 60 } }
-      });
-      
-      finalY = (doc as any).lastAutoTable.finalY + 15;
-
-      // 4. Component Tables by Type
-      const groupedComponents: Record<string, ComponentModel[]> = {};
-      components.forEach(c => {
-          if (c.type === ComponentType.Junction) return;
-          if (!groupedComponents[c.type]) groupedComponents[c.type] = [];
-          groupedComponents[c.type].push(c);
-      });
-
-      const typeLabels: Record<string, string> = {
-          [ComponentType.Resistor]: 'Resistors',
-          [ComponentType.Capacitor]: 'Capacitors',
-          [ComponentType.Inductor]: 'Inductors',
-          [ComponentType.Battery]: 'DC Sources',
-          [ComponentType.ACSource]: 'AC Sources',
-          [ComponentType.Diode]: 'Diodes',
-          [ComponentType.LED]: 'LEDs',
-          [ComponentType.Switch]: 'Switches',
-          [ComponentType.Lamp]: 'Lamps'
-      };
-
-      Object.entries(groupedComponents).forEach(([type, comps]) => {
-          if (comps.length === 0) return;
-
-          // Check for page break
-          if (finalY > pageHeight - 40) {
-              doc.addPage();
-              finalY = 20;
-          }
-
-          doc.setFontSize(14);
-          doc.setTextColor(0, 0, 0);
-          doc.text(typeLabels[type] || type, 14, finalY);
-
-          let head = [['Name', 'Properties', 'Voltage (V)', 'Current (A)', 'Power (W)', 'Formula']];
-          let body = comps.map(c => {
-              const voltage = formatUnit(c.simData.voltage, 'V');
-              const current = formatUnit(c.simData.current, 'A');
-              const power = formatUnit(c.simData.power, 'W');
-              
-              let props = '';
-              let formula = '';
-
-              if (c.type === ComponentType.Resistor) {
-                  props = `R = ${formatUnit(c.props.resistance || 0, 'Ω')}`;
-                  formula = 'V = I * R\nP = V * I';
-              } else if (c.type === ComponentType.Capacitor || c.type === ComponentType.PolarizedCapacitor) {
-                  props = `C = ${formatUnit(c.props.capacitance || 0, 'F')}`;
-                  formula = 'I = C * dV/dt\nE = 0.5 C V^2';
-              } else if (c.type === ComponentType.Inductor) {
-                  props = `L = ${formatUnit(c.props.inductance || 0, 'H')}`;
-                  formula = 'V = L * dI/dt\nE = 0.5 L I^2';
-              } else if (c.type === ComponentType.Battery) {
-                  props = `V = ${formatUnit(c.props.voltage || 0, 'V')}`;
-                  formula = 'Source';
-              } else if (c.type === ComponentType.ACSource) {
-                  props = `${formatUnit(c.props.amplitude || 0, 'V')} @ ${formatUnit(c.props.frequency || 0, 'Hz')}`;
-                  formula = 'V(t) = A sin(wt)';
-              } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
-                  props = c.type === ComponentType.LED ? `Color: ${c.props.color}` : (c.props.diodeType || 'Rectifier');
-                  formula = 'Shockley Eq.';
-              }
-
-              return [
-                  c.props.name || c.id.substring(0, 6),
-                  props,
-                  voltage,
-                  current,
-                  power,
-                  formula
-              ];
-          });
-
-          jspdfAutotable(doc, {
-              startY: finalY + 5,
-              head: head,
-              body: body,
-              theme: 'grid',
-              headStyles: { fillColor: [41, 128, 185], halign: 'center' },
-              styles: { fontSize: 9, cellPadding: 4, valign: 'middle', halign: 'center' },
-              columnStyles: {
-                  0: { fontStyle: 'bold', halign: 'left' }, // Name
-                  1: { halign: 'left' }, // Properties
-                  5: { fontStyle: 'italic', textColor: [100, 100, 100] } // Formula
-              }
-          });
-
-          finalY = (doc as any).lastAutoTable.finalY + 15;
-      });
-      
-      doc.save(`ohmic_report_${Date.now()}.pdf`);
-  };
-
-  const handleContextMenu = (x: number, y: number, id: string) => {
-      setContextMenu({ x, y, id });
-      setEditPanel(null); // Close edit panel if open
-  };
-
-  const handleEditClick = () => {
-      if (contextMenu) {
-          setEditPanel({ x: contextMenu.x, y: contextMenu.y, id: contextMenu.id });
-          setContextMenu(null);
-      }
-  };
-
-  const handleAddGraph = (type: 'voltage' | 'current') => {
-      if (editPanel) {
-          const color = type === 'voltage' ? '#00e5ff' : '#ff9d00';
-          setGraphs(prev => [...prev, { 
-              id: Date.now().toString(), 
-              componentId: editPanel.id, 
-              type, 
-              color 
-          }]);
-          setEditPanel(null);
-      }
-  };
-
   return (
-    <div className="flex h-screen overflow-hidden bg-[#1a1a1a] select-none" onClick={() => { setContextMenu(null); if (!editPanel) setEditPanel(null); }}>
+    <div className="flex h-screen overflow-hidden bg-[#1a1a1a] select-none">
       <Sidebar onPlace={(type) => !isSimulating && setPlacementMode({ type, rotation: 0 })} isSimulating={isSimulating} />
       <div className="flex-1 relative h-full flex flex-col min-w-0">
-        <CircuitCanvas 
-            ref={canvasRef} 
-            components={components} 
-            wires={wires} 
-            view={view} 
-            setView={setView} 
-            isSimulating={isSimulating} 
-            placementMode={placementMode} 
-            setPlacementMode={setPlacementMode} 
-            selectedIds={selectedIds} 
-            setSelectedIds={setSelectedIds} 
-            onAddComponent={addComponentWithHistory} 
-            onAddWire={addWireWithHistory} 
-            onWireJoin={handleWireJoinWithHistory} 
-            onRotateSelected={rotateSelectedWithHistory} 
-            onDragEnd={handleDragEndWithHistory} 
-            connectionStart={connectionStart} 
-            setConnectionStart={setConnectionStart} 
-            setComponents={setComponents} 
-            setWires={setWires} 
-            getAbsPorts={getAbsPorts} 
-            onOpenProperties={() => setShowProperties(true)} 
-            onCloseProperties={() => setShowProperties(false)} 
-            onContextMenu={handleContextMenu}
-            appSettings={appSettings} 
-        />
-        
-        {/* Context Menu */}
-        {contextMenu && (
-            <div 
-                className="absolute z-50 bg-[#252525] border border-zinc-700 rounded shadow-xl py-1 min-w-[120px]"
-                style={{ top: contextMenu.y, left: contextMenu.x }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                <button 
-                    className="w-full text-left px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white"
-                    onClick={handleEditClick}
-                >
-                    Edit
-                </button>
-                <button 
-                    className="w-full text-left px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white"
-                    onClick={() => { rotateSelectedWithHistory(contextMenu.id); setContextMenu(null); }}
-                >
-                    Rotate
-                </button>
-                <button 
-                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-zinc-700 hover:text-red-300"
-                    onClick={() => { deleteSelectedWithHistory(); setContextMenu(null); }}
-                >
-                    Delete
-                </button>
-            </div>
-        )}
-
-        {/* Edit Panel (Tab) */}
-        {editPanel && (
-            <div 
-                className="absolute z-50 bg-[#252525] border border-zinc-700 rounded shadow-xl p-2 flex flex-col gap-2"
-                style={{ top: editPanel.y, left: editPanel.x + 20 }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="text-xs font-bold text-zinc-500 uppercase mb-1">Add Graph</div>
-                <button 
-                    className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-cyan-400 text-xs rounded border border-zinc-700"
-                    onClick={() => handleAddGraph('voltage')}
-                >
-                    Voltage Graph
-                </button>
-                <button 
-                    className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-orange-400 text-xs rounded border border-zinc-700"
-                    onClick={() => handleAddGraph('current')}
-                >
-                    Current Graph
-                </button>
-                <button 
-                    className="mt-2 text-xs text-zinc-500 hover:text-zinc-300"
-                    onClick={() => setEditPanel(null)}
-                >
-                    Close
-                </button>
-            </div>
-        )}
-
-        {/* Graph Panel */}
-        <GraphPanel 
-            graphs={graphs} 
-            components={components} 
-            onRemoveGraph={(id) => setGraphs(prev => prev.filter(g => g.id !== id))}
-            isSimulating={isSimulating}
-            simTime={simTime}
-        />
-
+        <CircuitCanvas ref={canvasRef} components={components} wires={wires} view={view} setView={setView} isSimulating={isSimulating} placementMode={placementMode} setPlacementMode={setPlacementMode} selectedIds={selectedIds} setSelectedIds={setSelectedIds} onAddComponent={addComponentWithHistory} onAddWire={addWireWithHistory} onWireJoin={handleWireJoinWithHistory} onRotateSelected={rotateSelectedWithHistory} onDragEnd={handleDragEndWithHistory} connectionStart={connectionStart} setConnectionStart={setConnectionStart} setComponents={setComponents} setWires={setWires} getAbsPorts={getAbsPorts} onOpenProperties={() => setShowProperties(true)} onCloseProperties={() => setShowProperties(false)} appSettings={appSettings} />
         <div className="absolute top-6 right-6 z-10 flex items-center gap-2 bg-[#252525] border border-zinc-700 p-1.5 rounded-lg shadow-2xl">
             <div className="flex items-center gap-1 mr-2 border-r border-zinc-700 pr-2">
                 <button onClick={undo} disabled={historyIndex <= 0} className={`p-1.5 rounded ${historyIndex > 0 ? 'text-zinc-400 hover:bg-zinc-700 hover:text-white' : 'text-zinc-700 cursor-not-allowed'}`} title="Undo (Ctrl+Z)">
@@ -942,12 +648,6 @@ const App: React.FC = () => {
                         <span>Show Current</span>
                         <input type="checkbox" checked={appSettings.showCurrent} onChange={e => setAppSettings(p => ({...p, showCurrent: e.target.checked}))} className="accent-orange-500" />
                      </label>
-                </div>
-                <div className="border-t border-zinc-700 pt-3">
-                    <button onClick={handleExport} className="w-full py-2 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-bold uppercase rounded transition-colors flex items-center justify-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        Export Schematic & Data
-                    </button>
                 </div>
             </div>
         )}

@@ -111,22 +111,7 @@ export interface AppSettings {
 export const GRID_SIZE = 20; 
 export const GRID_STEP = 10; 
 
-export interface Theme {
-  bg: string;
-  gridMajor: string;
-  gridMinor: string;
-  accent: string;
-  selected: string;
-  wire: string;
-  wireSelected: string;
-  componentStroke: string;
-  componentFill: string;
-  text: string;
-  textSecondary?: string;
-  background?: string;
-}
-
-export const THEME: Theme = {
+export const THEME = {
   bg: '#1a1a1a',
   gridMajor: 'rgba(255,255,255,0.05)', 
   gridMinor: 'rgba(255,255,255,0.02)', 
@@ -136,8 +121,6 @@ export const THEME: Theme = {
   wireSelected: '#00e5ff',
   componentStroke: '#ffffff',
   componentFill: '#1a1a1a',
-  text: '#aaaaaa',
-  textSecondary: '#aaaaaa',
-  background: '#1a1a1a'
+  text: '#aaaaaa'
 };
 
