@@ -1,0 +1,5 @@
+{
+  "name": "Remix: OhmicCAD React v12.0",
+  "description": "A high-fidelity electronic circuit simulator featuring a non-linear physical solver, real-time current flow visualization, and interactive semiconductor modeling.",
+  "requestFramePermissions": []
+}
