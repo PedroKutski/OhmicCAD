@@ -113,23 +113,43 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isSimulating || isPaused) return;
     
-    const tickRate = 1; // 1ms for better transient resolution
-    const dt = (tickRate / 1000) * appSettings.timeStepMultiplier;
+    let animationFrameId: number;
+    const dt = 0.001 * appSettings.timeStepMultiplier; // Physics step size (1ms)
 
-    // If visualFlowSpeed is max (e.g. 20000), run many steps per frame
-    const stepsPerFrame = appSettings.visualFlowSpeed >= 20000 ? 100 : 1;
+    const loop = () => {
+        // Determine steps based on speed setting
+        // visualFlowSpeed is roughly "steps per second"
+        // At 60fps (16ms), speed 1000 -> 16 steps.
+        // Speed 20000 -> 333 steps.
+        
+        let stepsToRun = Math.round(appSettings.visualFlowSpeed / 60);
+        if (stepsToRun < 1) stepsToRun = 1;
+        
+        // Cap max steps to prevent freezing, but allow enough for "Instant" feel
+        // 200 steps * 1ms sim = 200ms sim per frame. @ 60fps = 12s sim per real second.
+        const MAX_STEPS = 200; 
+        if (stepsToRun > MAX_STEPS) stepsToRun = MAX_STEPS;
 
-    const interval = setInterval(() => {
-      for (let i = 0; i < stepsPerFrame; i++) {
-          CircuitSolver.solve(componentsRef.current, wiresRef.current, dt, simTimeRef.current);
-          simTimeRef.current += dt;
-      }
-      setSimTime(simTimeRef.current);
-      setComponents([...componentsRef.current]);
-      setWires([...wiresRef.current]);
-    }, tickRate);
-    
-    return () => clearInterval(interval);
+        const startTime = performance.now();
+        const timeBudget = 12; // Max ms to spend on physics per frame (leave 4ms for rendering)
+
+        for (let i = 0; i < stepsToRun; i++) {
+            CircuitSolver.solve(componentsRef.current, wiresRef.current, dt, simTimeRef.current);
+            simTimeRef.current += dt;
+            
+            // Bail if we're taking too long
+            if (performance.now() - startTime > timeBudget) break;
+        }
+
+        setSimTime(simTimeRef.current);
+        setComponents([...componentsRef.current]);
+        setWires([...wiresRef.current]);
+
+        animationFrameId = requestAnimationFrame(loop);
+    };
+
+    animationFrameId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animationFrameId);
   }, [isSimulating, isPaused, appSettings.timeStepMultiplier, appSettings.visualFlowSpeed]);
 
   useEffect(() => {
@@ -676,7 +696,7 @@ const App: React.FC = () => {
           theme: 'striped',
           headStyles: { fillColor: [60, 60, 60] },
           styles: { fontSize: 10, cellPadding: 3 },
-          columnStyles: { 0: { fontStyle: 'bold', width: 60 } }
+          columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } }
       });
       
       finalY = (doc as any).lastAutoTable.finalY + 15;
@@ -725,13 +745,13 @@ const App: React.FC = () => {
 
               if (c.type === ComponentType.Resistor) {
                   props = `R = ${formatUnit(c.props.resistance || 0, 'Ω')}`;
-                  formula = 'V = I * R\nP = V * I';
+                  formula = 'V = I × R\nP = V × I';
               } else if (c.type === ComponentType.Capacitor || c.type === ComponentType.PolarizedCapacitor) {
                   props = `C = ${formatUnit(c.props.capacitance || 0, 'F')}`;
-                  formula = 'I = C * dV/dt\nE = 0.5 C V^2';
+                  formula = 'I = C × dV/dt\nE = 0.5 C V²';
               } else if (c.type === ComponentType.Inductor) {
                   props = `L = ${formatUnit(c.props.inductance || 0, 'H')}`;
-                  formula = 'V = L * dI/dt\nE = 0.5 L I^2';
+                  formula = 'V = L × dI/dt\nE = 0.5 L I²';
               } else if (c.type === ComponentType.Battery) {
                   props = `V = ${formatUnit(c.props.voltage || 0, 'V')}`;
                   formula = 'Source';
@@ -914,7 +934,7 @@ const App: React.FC = () => {
                 <div className="flex flex-col gap-2">
                     <div className="flex justify-between text-xs text-zinc-400 uppercase font-bold">
                         <span>Simulation Speed</span>
-                        <span>{appSettings.visualFlowSpeed >= 20000 ? 'Instant' : `${(appSettings.visualFlowSpeed / 2000).toFixed(1)}x`}</span>
+                        <span>{appSettings.visualFlowSpeed >= 20000 ? 'Instant (Real-time)' : `${(appSettings.visualFlowSpeed / 2000).toFixed(1)}x`}</span>
                     </div>
                     <input 
                         type="range" 
