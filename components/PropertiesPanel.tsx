@@ -110,15 +110,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
 
   // -- Renderers --
 
-  const renderGenericInput = (key: string, value: any, onChange: (val: any) => void, forcedType?: string) => {
+  const renderGenericInput = (key: string, value: any, onChange: (val: any) => void) => {
       if (key === 'flowDir') return null;
       if (key === 'tolerance') return null; // Handled specially
       if (key === 'capacitanceUnit') return null; // Handled specially
       if (key === 'material') return null; // Handled specially for wires
       if (key === 'plot') return null; // Legacy property
       
-      const isNumber = forcedType === 'number' || typeof value === 'number';
-      const step = isNumber ? 'any' : undefined;
+      const step = typeof value === 'number' ? 'any' : undefined;
 
       return (
         <div key={key} className="mb-4">
@@ -142,12 +141,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
             </div>
           ) : (
             <input 
-              type={isNumber ? 'number' : 'text'}
+              type={typeof value === 'number' ? 'number' : 'text'}
               value={value === undefined ? '' : value}
               step={step}
               onChange={(e) => {
                 const raw = e.target.value;
-                if (isNumber) {
+                if (typeof value === 'number') {
                     if (raw === '') {
                         onChange(undefined);
                     } else {
@@ -162,16 +161,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
             />
           )}
         </div>
-      );
-  };
-
-  const renderInductorProps = () => {
-      const comp = target as ComponentModel;
-      return (
-          <div className="space-y-4">
-              {renderGenericInput('inductance', comp.props.inductance, (v) => onUpdateCompProps(comp.id, { inductance: v }), 'number')}
-              {renderGenericInput('name', comp.props.name, (v) => onUpdateCompProps(comp.id, { name: v }))}
-          </div>
       );
   };
 
@@ -404,7 +393,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
     const type = (target as ComponentModel).type;
     if (type === ComponentType.Resistor) return renderResistorProps();
     if (type === ComponentType.Capacitor) return renderCapacitorProps();
-    if (type === ComponentType.Inductor) return renderInductorProps();
     if (type === ComponentType.Diode) return renderDiodeProps();
     if (type === ComponentType.LED || type === ComponentType.Lamp) return renderLightProps();
     return renderGenericComponentProps();

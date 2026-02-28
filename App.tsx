@@ -4,13 +4,13 @@ import {
   ComponentType, ComponentModel, WireModel, ViewState, 
   Port, ComponentProps, AppSettings, THEME, GRID_STEP
 } from './types';
-import { rotatePoint, findSmartPath, distPointToSegment, findIntersection } from './utils/geometry';
+import { rotatePoint, findSmartPath, distPointToSegment } from './utils/geometry';
 import { Sidebar } from './components/Sidebar';
 import { PropertiesPanel } from './components/PropertiesPanel';
 import { CircuitCanvas, CircuitCanvasHandle } from './components/CircuitCanvas';
 import { CircuitSolver } from './services/Solver';
 
-const VISUAL_SPEEDS = [0, 1, 5, 10, 100, 1000, 5000, 20000];
+const VISUAL_SPEEDS = [0, 1, 5, 10, 100, 1000, 5000];
 
 const App: React.FC = () => {
   const loadInitialState = (key: string, def: any) => {
@@ -43,58 +43,6 @@ const App: React.FC = () => {
   const [showProperties, setShowProperties] = useState(false);
   const [statusMsg, setStatusMsg] = useState("Ready.");
 
-  const [history, setHistory] = useState<{components: ComponentModel[], wires: WireModel[]}[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-
-  // Save state to history
-  const saveToHistory = useCallback((newComponents: ComponentModel[], newWires: WireModel[]) => {
-      setHistory(prev => {
-          const newHistory = prev.slice(0, historyIndex + 1);
-          newHistory.push({ components: newComponents, wires: newWires });
-          if (newHistory.length > 20) newHistory.shift(); // Limit history size
-          return newHistory;
-      });
-      setHistoryIndex(prev => Math.min(prev + 1, 19));
-  }, [historyIndex]);
-
-  const undo = useCallback(() => {
-      if (historyIndex > 0) {
-          const prevState = history[historyIndex - 1];
-          setComponents(prevState.components);
-          setWires(prevState.wires);
-          setHistoryIndex(historyIndex - 1);
-      }
-  }, [history, historyIndex]);
-
-  const redo = useCallback(() => {
-      if (historyIndex < history.length - 1) {
-          const nextState = history[historyIndex + 1];
-          setComponents(nextState.components);
-          setWires(nextState.wires);
-          setHistoryIndex(historyIndex + 1);
-      }
-  }, [history, historyIndex]);
-
-  // Initial history save
-  useEffect(() => {
-      if (history.length === 0 && components.length === 0 && wires.length === 0) {
-           // Don't save empty initial state if it's truly empty
-      } else if (history.length === 0) {
-          setHistory([{ components, wires }]);
-          setHistoryIndex(0);
-      }
-  }, []);
-
-  // Wrap setComponents and setWires to save history when user interacts
-  // We need a way to distinguish user actions from simulation updates
-  // For now, we'll expose a helper to save history explicitly after actions
-  
-  const updateStateWithHistory = (newComponents: ComponentModel[], newWires: WireModel[]) => {
-      setComponents(newComponents);
-      setWires(newWires);
-      saveToHistory(newComponents, newWires);
-  };
-
   useEffect(() => {
     componentsRef.current = components;
     wiresRef.current = wires;
@@ -106,21 +54,17 @@ const App: React.FC = () => {
     const tickRate = 1; // 1ms for better transient resolution
     const dt = (tickRate / 1000) * appSettings.timeStepMultiplier;
 
-    // If visualFlowSpeed is max (e.g. 20000), run many steps per frame
-    const stepsPerFrame = appSettings.visualFlowSpeed >= 20000 ? 100 : 1;
-
     const interval = setInterval(() => {
-      for (let i = 0; i < stepsPerFrame; i++) {
-          CircuitSolver.solve(componentsRef.current, wiresRef.current, dt, simTimeRef.current);
-          simTimeRef.current += dt;
-      }
+      // Run multiple sub-steps per frame if needed for stability, but 1ms is already quite fine
+      CircuitSolver.solve(componentsRef.current, wiresRef.current, dt, simTimeRef.current);
+      simTimeRef.current += dt;
       setSimTime(simTimeRef.current);
       setComponents([...componentsRef.current]);
       setWires([...wiresRef.current]);
     }, tickRate);
     
     return () => clearInterval(interval);
-  }, [isSimulating, isPaused, appSettings.timeStepMultiplier, appSettings.visualFlowSpeed]);
+  }, [isSimulating, isPaused, appSettings.timeStepMultiplier]);
 
   useEffect(() => {
     localStorage.setItem('ohmic_components', JSON.stringify(components));
@@ -145,7 +89,61 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const deleteSelected = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    
+    setComponents(prev => {
+        const remaining = prev.filter(c => !selectedIds.includes(c.id));
+        
+        // Renumbering logic to ensure sequential names (R1, R2, etc.)
+        const counters: Record<string, number> = { R: 1, C: 1, V: 1, S: 1, J: 1, U: 1 };
+        
+        return remaining.map(c => {
+            let prefix = 'U';
+            switch (c.type) {
+                case ComponentType.Resistor: prefix = 'R'; break;
+                case ComponentType.Capacitor: 
+                case ComponentType.PolarizedCapacitor: prefix = 'C'; break;
+                case ComponentType.Battery: prefix = 'V'; break;
+                case ComponentType.Switch: 
+                case ComponentType.PushButton: prefix = 'S'; break;
+                case ComponentType.Junction: prefix = 'J'; break;
+            }
+            
+            // Assign new sequential name
+            const newName = `${prefix}${counters[prefix]++}`;
+            return { ...c, props: { ...c.props, name: newName } };
+        });
+    });
 
+    setWires(prev => prev.filter(w => !selectedIds.includes(w.id) && !selectedIds.includes(w.compAId) && !selectedIds.includes(w.compBId)));
+    setSelectedIds([]);
+  }, [selectedIds]);
+
+  const rotateSelected = useCallback((id?: string) => {
+      const targetIds = id ? [id] : selectedIds;
+      if (targetIds.length === 0) return;
+      
+      setComponents(prev => prev.map(c => {
+          if (targetIds.includes(c.id)) {
+              return { ...c, rotation: (c.rotation + 1) % 4 };
+          }
+          return c;
+      }));
+      
+      // Update wires for all rotated components
+      setWires(prev => prev.map(w => {
+          const isA = targetIds.includes(w.compAId);
+          const isB = targetIds.includes(w.compBId);
+          if (isA || isB) {
+              // We need the latest component positions/rotations here
+              // This is tricky with functional state updates if multiple components move
+              // But since we are only rotating, we can calculate based on the current state + the rotation we just applied
+              return w; // findSmartPath will be called in the next effect or we should trigger it
+          }
+          return w;
+      }));
+  }, [selectedIds]);
 
   const getObstacles = useCallback((comps: ComponentModel[]) => {
       const obstacles = new Set<string>();
@@ -204,12 +202,20 @@ const App: React.FC = () => {
       }));
   }, [components, getAbsPorts, getObstacles]);
 
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          if (isSimulating) return; // Prevent editing during simulation
+          if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
+          if (e.key === 'r' || e.key === 'R') rotateSelected();
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deleteSelected, rotateSelected, isSimulating]);
 
-
-  // Re-implementing addComponent to support history correctly
-  const addComponentWithHistory = (type: ComponentType, x: number, y: number, rotation: number) => {
-     const id = `comp_${Date.now()}`;
-     // ... naming logic ...
+  const addComponent = (type: ComponentType, x: number, y: number, rotation: number, splitWire?: WireModel) => {
+    const id = `comp_${Date.now()}`;
+    
+    // Automatic Naming
     let prefix = 'U';
     switch (type) {
         case ComponentType.Resistor: prefix = 'R'; break;
@@ -241,13 +247,11 @@ const App: React.FC = () => {
       props: { name },
       simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 }
     };
-    
-    // Props init
     if (type === ComponentType.Battery) { newComp.props.voltage = 9; newComp.props.capacity = 1000; }
     else if (type === ComponentType.Resistor) { newComp.props.resistance = 1000; }
     else if (type === ComponentType.Capacitor || type === ComponentType.PolarizedCapacitor) { newComp.props.capacitance = 10; newComp.props.capacitanceUnit = 'µF'; }
-    else if (type === ComponentType.Inductor) { newComp.props.inductance = 100e-3; }
-    else if (type === ComponentType.ACSource) { newComp.props.amplitude = 10; newComp.props.frequency = 60; }
+    else if (type === ComponentType.Inductor) { newComp.props.inductance = 100e-3; } // 100mH
+    else if (type === ComponentType.ACSource) { newComp.props.amplitude = 10; newComp.props.frequency = 60; } // 10V 60Hz
     else if (type === ComponentType.Diode) { newComp.props.diodeType = 'rectifier'; }
     else if (type === ComponentType.LED) { 
         newComp.props.color = '#00e5ff'; 
@@ -255,20 +259,19 @@ const App: React.FC = () => {
         newComp.props.maxCurrent = 0.02; 
     }
     else if (type === ComponentType.Lamp) { newComp.props.color = '#ffffaa'; newComp.props.resistance = 100; }
-
-    let nextWires = [...wires];
+    
     const newPorts = getAbsPorts(newComp);
     let wireToSplit: WireModel | null = null;
 
     if (newPorts.length === 2) {
-        for (const w of nextWires) {
+        for (const w of wires) {
             let p0OnWire = false;
             let p1OnWire = false;
             const threshold = 10;
 
-            for (let j = 0; j < w.path.length - 1; j++) {
-                const p1 = w.path[j];
-                const p2 = w.path[j+1];
+            for (let i = 0; i < w.path.length - 1; i++) {
+                const p1 = w.path[i];
+                const p2 = w.path[i+1];
                 if (!p0OnWire && distPointToSegment(newPorts[0], p1, p2) < threshold) p0OnWire = true;
                 if (!p1OnWire && distPointToSegment(newPorts[1], p1, p2) < threshold) p1OnWire = true;
             }
@@ -319,20 +322,18 @@ const App: React.FC = () => {
             props: { ...wireToSplit.props }
         };
 
-        nextWires = nextWires.filter(w => w.id !== wireToSplit!.id).concat([w1, w2]);
+        setWires(prev => prev.filter(w => w.id !== wireToSplit!.id).concat([w1, w2]));
         setStatusMsg(`Added ${type} and split wire`);
     } else {
         setStatusMsg(`Added ${type}`);
     }
 
-    const nextComponents = [...components, newComp];
-    updateStateWithHistory(nextComponents, nextWires);
-    setSelectedIds([id]); 
-    setPlacementMode(null);
+    setComponents(prev => [...prev, newComp]);
+    setSelectedIds([id]); setPlacementMode(null);
     setShowProperties(true);
   };
 
-  const addWireWithHistory = (start: { compId: string; portId: number }, end: { compId: string; portId: number }) => {
+  const addWire = (start: { compId: string; portId: number }, end: { compId: string; portId: number }) => {
     if (start.compId === end.compId) return;
     
     const cA = components.find(c => c.id === start.compId)!;
@@ -343,116 +344,16 @@ const App: React.FC = () => {
     const obstacles = getObstacles(components);
     const path = findSmartPath(pA, pB, obstacles);
 
-    // Check for intersections with existing wires
-    let intersectionPoint: {x: number, y: number} | null = null;
-    let intersectedWire: WireModel | null = null;
-    let intersectedSegmentIndex = -1;
-    let newWireSegmentIndex = -1;
-
-    // Iterate segments of the new path
-    for (let i = 0; i < path.length - 1; i++) {
-        const p1 = path[i];
-        const p2 = path[i+1];
-
-        for (const w of wires) {
-            // Skip if connected to same component (already handled by port check usually, but good safety)
-            if (w.compAId === start.compId || w.compAId === end.compId || w.compBId === start.compId || w.compBId === end.compId) continue;
-
-            for (let j = 0; j < w.path.length - 1; j++) {
-                const p3 = w.path[j];
-                const p4 = w.path[j+1];
-                
-                const inter = findIntersection(p1, p2, p3, p4);
-                if (inter) {
-                    // Snap to grid
-                    const gx = Math.round(inter.x / GRID_STEP) * GRID_STEP;
-                    const gy = Math.round(inter.y / GRID_STEP) * GRID_STEP;
-                    
-                    // Check if intersection is actually on the segments (findIntersection checks infinite lines? No, implementation checks segments)
-                    // But we should avoid endpoints
-                    const isEndpoint = (x: number, y: number) => 
-                        (Math.abs(x - p1.x) < 1 && Math.abs(y - p1.y) < 1) ||
-                        (Math.abs(x - p2.x) < 1 && Math.abs(y - p2.y) < 1) ||
-                        (Math.abs(x - p3.x) < 1 && Math.abs(y - p3.y) < 1) ||
-                        (Math.abs(x - p4.x) < 1 && Math.abs(y - p4.y) < 1);
-
-                    if (!isEndpoint(gx, gy)) {
-                        intersectionPoint = { x: gx, y: gy };
-                        intersectedWire = w;
-                        intersectedSegmentIndex = j;
-                        newWireSegmentIndex = i;
-                        break;
-                    }
-                }
-            }
-            if (intersectionPoint) break;
-        }
-        if (intersectionPoint) break;
-    }
-
-    if (intersectionPoint && intersectedWire) {
-        // Create a junction at intersection
-        const jId = `junc_${Date.now()}`;
-        const junction: ComponentModel = { 
-            id: jId, type: ComponentType.Junction, 
-            x: intersectionPoint.x, y: intersectionPoint.y, rotation: 0, state: false, 
-            props: { name: 'J' }, 
-            simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 } 
-        };
-
-        // Split the existing wire
-        const wProps = { ...intersectedWire.props };
-        const w1: WireModel = { 
-            id: `w_${Date.now()}_1`, 
-            compAId: intersectedWire.compAId, portAIndex: intersectedWire.portAIndex, 
-            compBId: jId, portBIndex: 0, 
-            anchor: null, path: [], selected: false, simData: { ...intersectedWire.simData }, props: wProps 
-        };
-        const w2: WireModel = { 
-            id: `w_${Date.now()}_2`, 
-            compAId: jId, portAIndex: 0, 
-            compBId: intersectedWire.compBId, portBIndex: intersectedWire.portBIndex, 
-            anchor: null, path: [], selected: false, simData: { ...intersectedWire.simData }, props: wProps 
-        };
-
-        // Split the new wire into two parts connecting to the junction
-        // Part 1: Start to Junction
-        const wNew1: WireModel = {
-            id: `wire_${Date.now()}_n1`, 
-            compAId: start.compId, portAIndex: start.portId, 
-            compBId: jId, portBIndex: 0,
-            anchor: null, path: [], selected: false, 
-            simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 },
-            props: { name: 'Wire' }
-        };
-
-        // Part 2: Junction to End
-        const wNew2: WireModel = {
-            id: `wire_${Date.now()}_n2`, 
-            compAId: jId, portAIndex: 0, 
-            compBId: end.compId, portBIndex: end.portId,
-            anchor: null, path: [], selected: false, 
-            simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 },
-            props: { name: 'Wire' }
-        };
-
-        const nextWires = wires.filter(w => w.id !== intersectedWire!.id).concat([w1, w2, wNew1, wNew2]);
-        updateStateWithHistory([...components, junction], nextWires);
-        setStatusMsg("Created junction at intersection");
-    } else {
-        const newWire: WireModel = {
-          id: `wire_${Date.now()}`, compAId: start.compId, portAIndex: start.portId, compBId: end.compId, portBIndex: end.portId,
-          anchor: null, path, selected: false,
-          simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 },
-          props: { name: 'Wire' }
-        };
-        updateStateWithHistory(components, [...wires, newWire]);
-    }
-    
-    setConnectionStart(null);
+    const newWire: WireModel = {
+      id: `wire_${Date.now()}`, compAId: start.compId, portAIndex: start.portId, compBId: end.compId, portBIndex: end.portId,
+      anchor: null, path, selected: false,
+      simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 },
+      props: { name: 'Wire' }
+    };
+    setWires(prev => [...prev, newWire]); setConnectionStart(null);
   };
 
-  const handleWireJoinWithHistory = (wire: WireModel, point: {x: number, y: number}) => {
+  const handleWireJoin = (wire: WireModel, point: {x: number, y: number}) => {
     if (!connectionStart) return;
     const jId = `junc_${Date.now()}`;
     const junction: ComponentModel = { id: jId, type: ComponentType.Junction, x: point.x, y: point.y, rotation: 0, state: false, props: { name: 'Junction' }, simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 } };
@@ -460,156 +361,15 @@ const App: React.FC = () => {
     const w1: WireModel = { id: `w_${Date.now()}_1`, compAId: wire.compAId, portAIndex: wire.portAIndex, compBId: jId, portBIndex: 0, anchor: null, path: [], selected: false, simData: { ...wire.simData }, props: wProps };
     const w2: WireModel = { id: `w_${Date.now()}_2`, compAId: jId, portAIndex: 0, compBId: wire.compBId, portBIndex: wire.portBIndex, anchor: null, path: [], selected: false, simData: { ...wire.simData }, props: wProps };
     const w3: WireModel = { id: `w_${Date.now()}_3`, compAId: connectionStart.compId, portAIndex: connectionStart.portId, compBId: jId, portBIndex: 0, anchor: null, path: [], selected: false, simData: { ...wire.simData }, props: { name: 'Wire' } };
-    
-    updateStateWithHistory([...components, junction], wires.filter(w => w.id !== wire.id).concat([w1, w2, w3]));
-    setConnectionStart(null);
+    setComponents(prev => [...prev, junction]); setWires(prev => prev.filter(w => w.id !== wire.id).concat([w1, w2, w3])); setConnectionStart(null);
   };
-  
-  const deleteSelectedWithHistory = () => {
-      if (selectedIds.length === 0) return;
-      
-      const remainingComponents = components.filter(c => !selectedIds.includes(c.id));
-      // Renumbering logic (simplified for brevity, keeping original logic would be better but it's long)
-      // Actually, let's just keep the components as is for now to avoid complex re-indexing bugs in history
-      
-      const remainingWires = wires.filter(w => !selectedIds.includes(w.id) && !selectedIds.includes(w.compAId) && !selectedIds.includes(w.compBId));
-      
-      updateStateWithHistory(remainingComponents, remainingWires);
-      setSelectedIds([]);
-  };
-
-  const rotateSelectedWithHistory = (id?: string) => {
-      const targetIds = id ? [id] : selectedIds;
-      if (targetIds.length === 0) return;
-      
-      const nextComponents = components.map(c => {
-          if (targetIds.includes(c.id)) {
-              return { ...c, rotation: (c.rotation + 1) % 4 };
-          }
-          return c;
-      });
-      
-      // Wires update automatically via effect, but we should save the component state
-      updateStateWithHistory(nextComponents, wires);
-  };
-  
-  const handleDragEndWithHistory = (id: string) => {
-    const comp = components.find(c => c.id === id);
-    if (!comp) return;
-
-    const ports = getAbsPorts(comp);
-    let newWires = [...wires];
-    let modified = false;
-    let newComponents = [...components];
-
-    // ... (same logic as before for splitting/joining) ...
-    // To avoid code duplication, I should have extracted the logic. 
-    // For now, I will copy the logic from handleDragEnd but use local variables
-    
-    // Check if any port lands on a wire (T-junction or inline split)
-    if (ports.length === 2) {
-        let wireToSplit: WireModel | null = null;
-        for (const w of newWires) {
-            if (w.compAId === comp.id || w.compBId === comp.id) continue;
-            let p0OnWire = false;
-            let p1OnWire = false;
-            const threshold = 10;
-            for (let i = 0; i < w.path.length - 1; i++) {
-                const p1 = w.path[i];
-                const p2 = w.path[i+1];
-                if (!p0OnWire && distPointToSegment(ports[0], p1, p2) < threshold) p0OnWire = true;
-                if (!p1OnWire && distPointToSegment(ports[1], p1, p2) < threshold) p1OnWire = true;
-            }
-            if (p0OnWire && p1OnWire) {
-                wireToSplit = w;
-                break;
-            }
-        }
-
-        if (wireToSplit) {
-            const wireStart = wireToSplit.path[0];
-            const dist0 = Math.hypot(ports[0].x - wireStart.x, ports[0].y - wireStart.y);
-            const dist1 = Math.hypot(ports[1].x - wireStart.x, ports[1].y - wireStart.y);
-            let firstPort = ports[0];
-            let secondPort = ports[1];
-            if (dist1 < dist0) {
-                firstPort = ports[1];
-                secondPort = ports[0];
-            }
-            const w1: WireModel = { id: `wire_${Date.now()}_1`, compAId: wireToSplit.compAId, portAIndex: wireToSplit.portAIndex, compBId: comp.id, portBIndex: firstPort.id, anchor: null, path: [], selected: false, simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 }, props: { ...wireToSplit.props } };
-            const w2: WireModel = { id: `wire_${Date.now()}_2`, compAId: comp.id, portAIndex: secondPort.id, compBId: wireToSplit.compBId, portBIndex: wireToSplit.portBIndex, anchor: null, path: [], selected: false, simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 }, props: { ...wireToSplit.props } };
-            newWires = newWires.filter(w => w.id !== wireToSplit!.id).concat([w1, w2]);
-            modified = true;
-        }
-    }
-
-    if (!modified) {
-        ports.forEach(port => {
-             const threshold = 10;
-             const targetWire = newWires.find(w => {
-                if (w.compAId === comp.id && w.portAIndex === port.id) return false;
-                if (w.compBId === comp.id && w.portBIndex === port.id) return false;
-                for (let i = 0; i < w.path.length - 1; i++) {
-                    const p1 = w.path[i];
-                    const p2 = w.path[i+1];
-                    if (distPointToSegment(port, p1, p2) < threshold) return true;
-                }
-                return false;
-             });
-
-             if (targetWire) {
-                 const jId = `junc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-                 const junction: ComponentModel = { id: jId, type: ComponentType.Junction, x: port.x, y: port.y, rotation: 0, state: false, props: { name: 'J' }, simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 } };
-                 newComponents.push(junction);
-                 const wProps = { ...targetWire.props };
-                 const w1: WireModel = { id: `w_${Date.now()}_1`, compAId: targetWire.compAId, portAIndex: targetWire.portAIndex, compBId: jId, portBIndex: 0, anchor: null, path: [], selected: false, simData: { ...targetWire.simData }, props: wProps };
-                 const w2: WireModel = { id: `w_${Date.now()}_2`, compAId: jId, portAIndex: 0, compBId: targetWire.compBId, portBIndex: targetWire.portBIndex, anchor: null, path: [], selected: false, simData: { ...targetWire.simData }, props: wProps };
-                 const w3: WireModel = { id: `w_${Date.now()}_3`, compAId: comp.id, portAIndex: port.id, compBId: jId, portBIndex: 0, anchor: null, path: [], selected: false, simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 }, props: { name: 'Wire' } };
-                 newWires = newWires.filter(w => w.id !== targetWire.id).concat([w1, w2, w3]);
-                 modified = true;
-             }
-        });
-    }
-
-    if (modified) {
-        updateStateWithHistory(newComponents, newWires);
-    } else {
-        // Just save the position change
-        updateStateWithHistory(components, wires);
-    }
-  };
-
-  useEffect(() => {
-      const handleKeyDown = (e: KeyboardEvent) => {
-          const target = e.target as HTMLElement;
-          if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-
-          if (isSimulating) return; // Prevent editing during simulation
-          if (e.key === 'Delete' || e.key === 'Backspace') deleteSelectedWithHistory();
-          if (e.key === 'r' || e.key === 'R') rotateSelectedWithHistory();
-          if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-              if (e.shiftKey) redo();
-              else undo();
-          }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [deleteSelectedWithHistory, rotateSelectedWithHistory, isSimulating, undo, redo]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#1a1a1a] select-none">
       <Sidebar onPlace={(type) => !isSimulating && setPlacementMode({ type, rotation: 0 })} isSimulating={isSimulating} />
       <div className="flex-1 relative h-full flex flex-col min-w-0">
-        <CircuitCanvas ref={canvasRef} components={components} wires={wires} view={view} setView={setView} isSimulating={isSimulating} placementMode={placementMode} setPlacementMode={setPlacementMode} selectedIds={selectedIds} setSelectedIds={setSelectedIds} onAddComponent={addComponentWithHistory} onAddWire={addWireWithHistory} onWireJoin={handleWireJoinWithHistory} onRotateSelected={rotateSelectedWithHistory} onDragEnd={handleDragEndWithHistory} connectionStart={connectionStart} setConnectionStart={setConnectionStart} setComponents={setComponents} setWires={setWires} getAbsPorts={getAbsPorts} onOpenProperties={() => setShowProperties(true)} onCloseProperties={() => setShowProperties(false)} appSettings={appSettings} />
+        <CircuitCanvas ref={canvasRef} components={components} wires={wires} view={view} setView={setView} isSimulating={isSimulating} placementMode={placementMode} setPlacementMode={setPlacementMode} selectedIds={selectedIds} setSelectedIds={setSelectedIds} onAddComponent={addComponent} onAddWire={addWire} onWireJoin={handleWireJoin} onRotateSelected={rotateSelected} connectionStart={connectionStart} setConnectionStart={setConnectionStart} setComponents={setComponents} setWires={setWires} getAbsPorts={getAbsPorts} onOpenProperties={() => setShowProperties(true)} onCloseProperties={() => setShowProperties(false)} appSettings={appSettings} />
         <div className="absolute top-6 right-6 z-10 flex items-center gap-2 bg-[#252525] border border-zinc-700 p-1.5 rounded-lg shadow-2xl">
-            <div className="flex items-center gap-1 mr-2 border-r border-zinc-700 pr-2">
-                <button onClick={undo} disabled={historyIndex <= 0} className={`p-1.5 rounded ${historyIndex > 0 ? 'text-zinc-400 hover:bg-zinc-700 hover:text-white' : 'text-zinc-700 cursor-not-allowed'}`} title="Undo (Ctrl+Z)">
-                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
-                </button>
-                <button onClick={redo} disabled={historyIndex >= history.length - 1} className={`p-1.5 rounded ${historyIndex < history.length - 1 ? 'text-zinc-400 hover:bg-zinc-700 hover:text-white' : 'text-zinc-700 cursor-not-allowed'}`} title="Redo (Ctrl+Shift+Z)">
-                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M18.4 10.6C16.55 9 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg>
-                </button>
-            </div>
             <div className="px-2 font-mono text-xs text-orange-500 font-bold">{simTime.toFixed(2)}s</div>
             <button onClick={resetSimulation} className="p-1.5 rounded hover:bg-zinc-700 text-zinc-400" title="Reset"><svg className="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg></button>
             <button onClick={() => { setIsSimulating(!isSimulating); if (!isSimulating) setShowProperties(false); }} className={`px-3 py-1.5 rounded font-bold text-[10px] uppercase ${isSimulating ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}`}>{isSimulating ? 'Stop' : 'Run'}</button>
@@ -620,18 +380,15 @@ const App: React.FC = () => {
                 <div className="flex flex-col gap-2">
                     <div className="flex justify-between text-xs text-zinc-400 uppercase font-bold">
                         <span>Simulation Speed</span>
-                        <span>{appSettings.visualFlowSpeed >= 20000 ? 'Instant' : `${(appSettings.visualFlowSpeed / 2000).toFixed(1)}x`}</span>
+                        <span>{(appSettings.visualFlowSpeed / 2000).toFixed(0)}x</span>
                     </div>
                     <input 
                         type="range" 
                         min="0" 
                         max="10" 
                         step="1"
-                        value={appSettings.visualFlowSpeed >= 20000 ? 10 : appSettings.visualFlowSpeed / 2000} 
-                        onChange={(e) => {
-                            const val = parseInt(e.target.value);
-                            setAppSettings(prev => ({ ...prev, visualFlowSpeed: val === 10 ? 20000 : val * 2000 }));
-                        }}
+                        value={appSettings.visualFlowSpeed / 2000} 
+                        onChange={(e) => setAppSettings(prev => ({ ...prev, visualFlowSpeed: parseInt(e.target.value) * 2000 }))}
                         className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
                     />
                 </div>

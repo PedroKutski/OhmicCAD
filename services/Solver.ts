@@ -154,18 +154,22 @@ export class CircuitSolver {
                 stampR(u, v, R_lamp);
 
             } else if (c.type === ComponentType.Inductor) {
-                // Companion Model with Series Resistance (ESR)
+                // Companion Model (Backward Euler)
+                // v(n) = L * (i(n) - i(n-1)) / dt
+                // i(n) = i(n-1) + (dt/L)*v(n)
+                // Modeled as Conductance G = dt/L in parallel with Current Source I = i(n-1)
+                
                 const L = c.props.inductance || 100e-3;
-                const Rs = 0.1; // 100 mOhm ESR - more realistic and prevents kA currents
-                const safeDt = Math.max(1e-6, dt);
-                const G_eq = 1 / (Rs + L/safeDt);
-                const iPrev = c.simData.storedCurrent || 0; 
-                const I_eq = iPrev * (L/safeDt) * G_eq;
+                const G = dt / L;
+                const iPrev = c.simData.storedCurrent || 0; // Current from u to v
                 
-                stampG(u, v, G_eq);
+                stampG(u, v, G);
+                // Total current leaving u = G*(Vu - Vv) + iPrev
+                // KCL at u: ... + G(Vu - Vv) + iPrev = 0 -> B[u] -= iPrev
+                // KCL at v: ... + G(Vv - Vu) - iPrev = 0 -> B[v] += iPrev
                 
-                B[u] -= I_eq;
-                B[v] += I_eq;
+                B[u] -= iPrev;
+                B[v] += iPrev;
 
             } else if (c.type === ComponentType.Battery) {
                 const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
@@ -223,13 +227,10 @@ export class CircuitSolver {
              c.simData.voltage = Math.abs(newVoltage);
         } else if (c.type === ComponentType.Inductor) {
              const L = c.props.inductance || 100e-3;
-             const Rs = 0.1;
-             const safeDt = Math.max(1e-6, dt);
-             const G_eq = 1 / (Rs + L/safeDt);
+             const G = dt / L;
              const iPrev = c.simData.storedCurrent || 0;
-             const I_eq = iPrev * (L/safeDt) * G_eq;
-             
-             newCurrent = G_eq * newVoltage + I_eq;
+             // I = iPrev + G * V
+             newCurrent = iPrev + G * newVoltage;
              
              c.simData.storedCurrent = newCurrent; // Update state
              c.simData.voltage = Math.abs(newVoltage);
