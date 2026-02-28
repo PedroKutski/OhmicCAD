@@ -34,8 +34,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPlace, isSimulating = false 
 
   return (
     <div className="w-72 bg-[#252525] border-r border-zinc-800 flex flex-col z-50 shadow-2xl overflow-hidden">
-      <div className="p-6 text-2xl font-black tracking-tight border-b border-zinc-800 bg-gradient-to-r from-[#252525] to-[#2a2a2a]">
+      <div className="p-6 text-2xl font-black tracking-tight border-b border-zinc-800 bg-gradient-to-r from-[#252525] to-[#2a2a2a] flex items-baseline">
         Ohmic<span className="text-orange-500">CAD</span>
+        <span className="text-xs text-zinc-600 font-normal ml-2">v1.2.0</span>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {categories.map(cat => (

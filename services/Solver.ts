@@ -47,8 +47,8 @@ export class CircuitSolver {
             B[v] -= i;
         };
 
-        const stampVoltageSource = (u: number, v: number, voltage: number, idx: number) => {
-            A[idx][u] = 1; A[idx][v] = -1; B[idx] = voltage;
+        const stampVoltageSource = (u: number, v: number, voltage: number, idx: number, Rs: number = 0) => {
+            A[idx][u] = 1; A[idx][v] = -1; A[idx][idx] = -Rs; B[idx] = voltage;
             A[u][idx] = 1; A[v][idx] = -1;
         };
         
@@ -56,7 +56,7 @@ export class CircuitSolver {
             const u = pMap.get(`${w.compAId}_${w.portAIndex}`);
             const v = pMap.get(`${w.compBId}_${w.portBIndex}`);
             if (u !== undefined && v !== undefined) {
-                const R_Ideal = 1e-4;
+                const R_Ideal = 1e-3; // 1 mOhm wire resistance
                 stampR(u, v, R_Ideal);
                 w.simData.resistance = R_Ideal;
             }
@@ -68,7 +68,7 @@ export class CircuitSolver {
             const v = pMap.get(`${c.id}_1`)!; 
             
             if (c.type === ComponentType.Resistor) {
-                stampR(u, v, c.props.resistance || 1000);
+                stampR(u, v, Math.max(1e-6, c.props.resistance || 1000));
             } else if (c.type === ComponentType.Switch || c.type === ComponentType.PushButton) {
                 stampR(u, v, c.props.closed ? R_CLOSED_SWITCH : R_OPEN_SWITCH);
             } else if (c.type === ComponentType.Capacitor || c.type === ComponentType.PolarizedCapacitor) {
@@ -154,34 +154,32 @@ export class CircuitSolver {
                 stampR(u, v, R_lamp);
 
             } else if (c.type === ComponentType.Inductor) {
-                // Companion Model (Backward Euler)
-                // v(n) = L * (i(n) - i(n-1)) / dt
-                // i(n) = i(n-1) + (dt/L)*v(n)
-                // Modeled as Conductance G = dt/L in parallel with Current Source I = i(n-1)
-                
+                // Companion Model with Series Resistance (ESR)
                 const L = c.props.inductance || 100e-3;
-                const G = dt / L;
-                const iPrev = c.simData.storedCurrent || 0; // Current from u to v
+                const Rs = 0.1; // 100 mOhm ESR - more realistic and prevents kA currents
+                const safeDt = Math.max(1e-6, dt);
+                const G_eq = 1 / (Rs + L/safeDt);
+                const iPrev = c.simData.storedCurrent || 0; 
+                const I_eq = iPrev * (L/safeDt) * G_eq;
                 
-                stampG(u, v, G);
-                // Total current leaving u = G*(Vu - Vv) + iPrev
-                // KCL at u: ... + G(Vu - Vv) + iPrev = 0 -> B[u] -= iPrev
-                // KCL at v: ... + G(Vv - Vu) - iPrev = 0 -> B[v] += iPrev
+                stampG(u, v, G_eq);
                 
-                B[u] -= iPrev;
-                B[v] += iPrev;
+                B[u] -= I_eq;
+                B[v] += I_eq;
 
             } else if (c.type === ComponentType.Battery) {
                 const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
                 const idx = pList.length + vsIdx;
-                stampVoltageSource(v, u, c.props.voltage || 9, idx);
+                // Add 0.1 Ohm internal resistance to prevent infinite current
+                stampVoltageSource(v, u, c.props.voltage || 9, idx, 0.1);
             } else if (c.type === ComponentType.ACSource) {
                 const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
                 const idx = pList.length + vsIdx;
                 const amp = c.props.amplitude || 10;
                 const freq = c.props.frequency || 60;
                 const val = amp * Math.sin(2 * Math.PI * freq * simTime);
-                stampVoltageSource(v, u, val, idx);
+                // Add 0.1 Ohm internal resistance
+                stampVoltageSource(v, u, val, idx, 0.1);
             }
         });
         
@@ -227,10 +225,13 @@ export class CircuitSolver {
              c.simData.voltage = Math.abs(newVoltage);
         } else if (c.type === ComponentType.Inductor) {
              const L = c.props.inductance || 100e-3;
-             const G = dt / L;
+             const Rs = 0.1;
+             const safeDt = Math.max(1e-6, dt);
+             const G_eq = 1 / (Rs + L/safeDt);
              const iPrev = c.simData.storedCurrent || 0;
-             // I = iPrev + G * V
-             newCurrent = iPrev + G * newVoltage;
+             const I_eq = iPrev * (L/safeDt) * G_eq;
+             
+             newCurrent = G_eq * newVoltage + I_eq;
              
              c.simData.storedCurrent = newCurrent; // Update state
              c.simData.voltage = Math.abs(newVoltage);

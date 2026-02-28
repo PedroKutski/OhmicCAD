@@ -21,6 +21,7 @@ interface CircuitCanvasProps {
   onAddWire: (start: { compId: string; portId: number }, end: { compId: string; portId: number }) => void;
   onWireJoin: (wire: WireModel, point: {x: number, y: number}) => void;
   onRotateSelected: (id?: string) => void;
+  onDragEnd: (id: string) => void;
   connectionStart: { compId: string; portId: number } | null;
   setConnectionStart: React.Dispatch<React.SetStateAction<{ compId: string; portId: number } | null>>;
   setComponents: React.Dispatch<React.SetStateAction<ComponentModel[]>>;
@@ -37,7 +38,7 @@ export interface CircuitCanvasHandle {
 
 export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>(({
   components, wires, view, setView, placementMode, setPlacementMode,
-  selectedIds, setSelectedIds, onAddComponent, onAddWire, onWireJoin, onRotateSelected, connectionStart, setConnectionStart,
+  selectedIds, setSelectedIds, onAddComponent, onAddWire, onWireJoin, onRotateSelected, onDragEnd, connectionStart, setConnectionStart,
   setComponents, setWires, getAbsPorts, onOpenProperties, onCloseProperties, isSimulating, appSettings
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -549,8 +550,15 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
             // Current
             lines.push(`I = ${formatUnit(target.simData.current, 'A')}`);
             
-            // Voltage Drop
-            lines.push(`V = ${formatUnit(target.simData.voltage, 'V')}`);
+            if ('type' in target && (target as ComponentModel).type === ComponentType.Inductor) {
+                 lines.push(`Vd = ${formatUnit(target.simData.voltage, 'V')}`);
+                 if ((target as ComponentModel).props.inductance !== undefined) {
+                     lines.push(`L = ${formatUnit((target as ComponentModel).props.inductance!, 'H')}`);
+                 }
+            } else {
+                 // Voltage Drop
+                 lines.push(`V = ${formatUnit(target.simData.voltage, 'V')}`);
+            }
             
             if ('type' in target && (target as ComponentModel).type === ComponentType.ACSource) {
                  const amp = (target as ComponentModel).props.amplitude || 0;
@@ -802,6 +810,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
 
         if (draggingCompId) {
             // Final snap is already handled in move, just clear state
+            onDragEnd(draggingCompId);
             setDraggingCompId(null);
             dragStartPosRef.current.clear();
         }

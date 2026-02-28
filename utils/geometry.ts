@@ -17,6 +17,23 @@ export function distPointToSegment(p: {x:number, y:number}, v: {x:number, y:numb
   return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
 }
 
+export function findIntersection(p1: {x:number, y:number}, p2: {x:number, y:number}, p3: {x:number, y:number}, p4: {x:number, y:number}) {
+    // Check if segments (p1, p2) and (p3, p4) intersect
+    const det = (p2.x - p1.x) * (p4.y - p3.y) - (p4.x - p3.x) * (p2.y - p1.y);
+    if (det === 0) return null; // Parallel
+
+    const lambda = ((p4.y - p3.y) * (p4.x - p1.x) + (p3.x - p4.x) * (p4.y - p1.y)) / det;
+    const gamma = ((p1.y - p2.y) * (p4.x - p1.x) + (p2.x - p1.x) * (p4.y - p1.y)) / det;
+
+    if ((0 < lambda && lambda < 1) && (0 < gamma && gamma < 1)) {
+        return {
+            x: p1.x + lambda * (p2.x - p1.x),
+            y: p1.y + lambda * (p2.y - p1.y)
+        };
+    }
+    return null;
+}
+
 // JPS-like A* implementation for Manhattan grid
 export function findSmartPath(
   start: {x:number, y:number}, 
