@@ -1,10 +1,10 @@
 
 import { ComponentModel, WireModel, ComponentType } from '../types';
 
-const G_MIN = 1e-12; 
+const G_MIN = 1e-10; // Stronger pull-down (10G Ohm) to stabilize floating nodes
 const R_CLOSED_SWITCH = 0.001; 
-const R_OPEN_SWITCH = 1e12; 
-const R_CAPACITOR_DC = 1e12; 
+const R_OPEN_SWITCH = 1e13; // 10T Ohm
+const R_CAPACITOR_DC = 1e13; 
 const MAX_ITERATIONS = 50; 
 
 export class CircuitSolver {
@@ -111,6 +111,8 @@ export class CircuitSolver {
 
             } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
                 // Diode Model (Piecewise Linear with Iteration)
+                // Reverted to PWL based on user feedback: "LED voltage is just a limit, the rest is calculated"
+                
                 const u = pMap.get(`${c.id}_0`)!; 
                 const v = pMap.get(`${c.id}_1`)!; 
                 
@@ -119,26 +121,32 @@ export class CircuitSolver {
                 if (c.type === ComponentType.LED) V_fwd = c.props.voltageDrop || 2.0;
                 
                 const V_zener = c.props.zenerVoltage || 5.6;
-                const R_on = 0.1;
-                const G_off = 1e-12;
+                
+                // Dynamic Resistance (Slope)
+                // 5.0 Ohms allows voltage to rise slightly with current (V = Vfwd + I*R),
+                // satisfying "calculated" behavior without being "disproportionate" (like 25 Ohms was).
+                let R_on = 0.1;
+                if (c.type === ComponentType.LED) R_on = 5.0; 
 
-                // Get voltage from previous iteration (or 0 if first iter)
-                // Note: sol is updated at the end of the loop, so for iter > 0, sol contains prev iter results
+                // Off Conductance
+                // 1e-10 (10G Ohm) ensures 0V when disconnected (fixes "ghost voltage" issue)
+                const G_off = 1e-10; 
+
+                // Get voltage from previous iteration
                 let Vd = 0;
                 if (iter > 0) Vd = sol[u] - sol[v];
                 
                 if (Vd > V_fwd) {
-                    // Forward Conducting
-                    // I = (Vd - V_fwd) / R_on = Vd/R_on - V_fwd/R_on
-                    // G = 1/R_on, I_eq = -V_fwd/R_on
+                    // Forward Conducting: I = (Vd - V_fwd) / R_on
+                    // Linearized: I = G*Vd + I_eq
+                    // G = 1/R_on
+                    // I_eq = -V_fwd/R_on
                     const G = 1/R_on;
                     const I_eq = -V_fwd/R_on;
                     stampG(u, v, G);
                     B[u] -= I_eq; B[v] += I_eq;
                 } else if (c.props.diodeType === 'zener' && Vd < -V_zener) {
                     // Zener Breakdown
-                    // I = (Vd - (-V_zener)) / R_on = (Vd + V_zener)/R_on
-                    // G = 1/R_on, I_eq = V_zener/R_on
                     const G = 1/R_on;
                     const I_eq = V_zener/R_on;
                     stampG(u, v, G);
@@ -236,13 +244,17 @@ export class CircuitSolver {
              c.simData.storedCurrent = newCurrent; // Update state
              c.simData.voltage = Math.abs(newVoltage);
         } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
+             // Reverted to PWL for state update consistency
              let V_fwd = 0.7;
              if (c.props.diodeType === 'schottky') V_fwd = 0.3;
              if (c.type === ComponentType.LED) V_fwd = c.props.voltageDrop || 2.0;
 
              const V_zener = c.props.zenerVoltage || 5.6;
-             const R_on = 0.1;
-             const G_off = 1e-12;
+             
+             let R_on = 0.1;
+             if (c.type === ComponentType.LED) R_on = 5.0;
+
+             const G_off = 1e-10;
 
              if (newVoltage > V_fwd) {
                  newCurrent = (newVoltage - V_fwd) / R_on;
@@ -269,6 +281,7 @@ export class CircuitSolver {
         
         if (c.type !== ComponentType.Capacitor && c.type !== ComponentType.PolarizedCapacitor && c.type !== ComponentType.Inductor) {
             c.simData.voltage = Math.abs(newVoltage);
+            if (c.simData.voltage < 1e-6) c.simData.voltage = 0; // Snap small voltages to 0
         }
         c.simData.power = c.simData.voltage * Math.abs(c.simData.current);
 
