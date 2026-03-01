@@ -258,7 +258,8 @@ const App: React.FC = () => {
         case ComponentType.Battery: prefix = 'V'; break;
         case ComponentType.Switch: 
         case ComponentType.PushButton: prefix = 'S'; break;
-        case ComponentType.Diode: prefix = 'D'; break;
+        case ComponentType.Diode:
+        case ComponentType.LED: prefix = 'D'; break;
         case ComponentType.Lamp: prefix = 'L'; break;
         case ComponentType.Junction: prefix = 'J'; break;
     }
@@ -286,6 +287,7 @@ const App: React.FC = () => {
     else if (type === ComponentType.Inductor) { newComp.props.inductance = 100e-3; }
     else if (type === ComponentType.ACSource) { newComp.props.amplitude = 20; newComp.props.frequency = 60; }
     else if (type === ComponentType.Diode) { newComp.props.diodeType = 'rectifier'; }
+    else if (type === ComponentType.LED) { newComp.props.diodeType = 'led'; newComp.props.voltageDrop = 2.0; newComp.props.currentRating = 0.02; newComp.props.ledColor = '#ff4d4d'; }
     else if (type === ComponentType.Lamp) { newComp.props.color = '#ffffaa'; newComp.props.resistance = 100; }
 
     let nextWires = [...wires];
@@ -741,7 +743,7 @@ const App: React.FC = () => {
                   `   Resultado: Vrms = ${fmt(vrms)} V`,
                   `4) Potência instantânea no passo atual: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
-          } else if (component.type === ComponentType.Diode) {
+          } else if (component.type === ComponentType.Diode || component.type === ComponentType.LED) {
               const vt = 0.02585;
               const is = 1e-12;
               const expArg = V / vt;
@@ -849,6 +851,7 @@ const App: React.FC = () => {
           [ComponentType.Battery]: 'DC Sources',
           [ComponentType.ACSource]: 'AC Sources',
           [ComponentType.Diode]: 'Diodes',
+          [ComponentType.LED]: 'LEDs',
           [ComponentType.Switch]: 'Switches',
           [ComponentType.Lamp]: 'Lamps'
       };
@@ -893,6 +896,9 @@ const App: React.FC = () => {
               } else if (c.type === ComponentType.Diode) {
                   props = c.props.diodeType || 'Rectifier';
                   formula = 'Shockley Eq.';
+              } else if (c.type === ComponentType.LED) {
+                  props = `Vf = ${formatUnit(c.props.voltageDrop || 2, 'V')} / If = ${formatUnit(c.props.currentRating || 0.02, 'A')}`;
+                  formula = 'I = Is(e^(V/(nVt))-1)';
               }
 
               return [
