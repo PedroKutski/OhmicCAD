@@ -280,7 +280,69 @@ export const drawWire = (
 ) => {
     ctx.strokeStyle = isSelected ? theme.wireSelected : theme.wire;
     ctx.lineWidth = isSelected ? 3 : 2;
-    ctx.beginPath(); w.path.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)); ctx.stroke();
+    const BASE_CORNER_RADIUS = 12;
+    const CORNER_RADIUS_FACTOR = 0.35;
+    const SHORT_SEGMENT_THRESHOLD = 14;
+
+    ctx.beginPath();
+    if (w.path.length > 0) {
+        ctx.moveTo(w.path[0].x, w.path[0].y);
+
+        if (w.path.length === 2) {
+            ctx.lineTo(w.path[1].x, w.path[1].y);
+        } else {
+            for (let i = 1; i < w.path.length - 1; i++) {
+                const prev = w.path[i - 1];
+                const curr = w.path[i];
+                const next = w.path[i + 1];
+
+                const prevDx = curr.x - prev.x;
+                const prevDy = curr.y - prev.y;
+                const nextDx = next.x - curr.x;
+                const nextDy = next.y - curr.y;
+
+                const segLenPrev = Math.hypot(prevDx, prevDy);
+                const segLenNext = Math.hypot(nextDx, nextDy);
+                const minSegLen = Math.min(segLenPrev, segLenNext);
+
+                const isFirstElbow = i === 1;
+                const isLastElbow = i === w.path.length - 2;
+                const segmentsTooShort = minSegLen < SHORT_SEGMENT_THRESHOLD;
+
+                const isOrthogonalTurn =
+                    (Math.abs(prevDx) > 0 && Math.abs(prevDy) === 0 && Math.abs(nextDx) === 0 && Math.abs(nextDy) > 0) ||
+                    (Math.abs(prevDx) === 0 && Math.abs(prevDy) > 0 && Math.abs(nextDx) > 0 && Math.abs(nextDy) === 0);
+
+                if (!isOrthogonalTurn || isFirstElbow || isLastElbow || segmentsTooShort) {
+                    ctx.lineTo(curr.x, curr.y);
+                    continue;
+                }
+
+                const cornerRadius = Math.min(BASE_CORNER_RADIUS, minSegLen * CORNER_RADIUS_FACTOR);
+                if (cornerRadius < 1) {
+                    ctx.lineTo(curr.x, curr.y);
+                    continue;
+                }
+
+                const prevUx = prevDx / segLenPrev;
+                const prevUy = prevDy / segLenPrev;
+                const nextUx = nextDx / segLenNext;
+                const nextUy = nextDy / segLenNext;
+
+                const cornerStartX = curr.x - prevUx * cornerRadius;
+                const cornerStartY = curr.y - prevUy * cornerRadius;
+                const cornerEndX = curr.x + nextUx * cornerRadius;
+                const cornerEndY = curr.y + nextUy * cornerRadius;
+
+                ctx.lineTo(cornerStartX, cornerStartY);
+                ctx.quadraticCurveTo(curr.x, curr.y, cornerEndX, cornerEndY);
+            }
+
+            const lastPoint = w.path[w.path.length - 1];
+            ctx.lineTo(lastPoint.x, lastPoint.y);
+        }
+    }
+    ctx.stroke();
     
     if (isSimulating && appSettings.showCurrent && Math.abs(w.simData.current) > 1e-6) {
         const currentDir = Math.sign(w.simData.current);
