@@ -36,7 +36,13 @@ const App: React.FC = () => {
   const [placementMode, setPlacementMode] = useState<{ type: ComponentType; rotation: number } | null>(null);
   const [connectionStart, setConnectionStart] = useState<{ compId: string; portId: number } | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(() => loadInitialState('ohmic_settings', {
-      showGrid: true, showLabels: true, showCurrent: true, smoothWires: false, timeStepMultiplier: 1.0, visualFlowSpeed: 1000
+      showGrid: true,
+      showLabels: true,
+      showCurrent: true,
+      currentFlowMode: 'conventional',
+      smoothWires: false,
+      timeStepMultiplier: 1.0,
+      visualFlowSpeed: 1000
   }));
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -980,6 +986,17 @@ const App: React.FC = () => {
                      <label className="flex items-center justify-between text-zinc-400 text-sm cursor-pointer hover:text-white">
                         <span>Show Current</span>
                         <input type="checkbox" checked={appSettings.showCurrent} onChange={e => setAppSettings(p => ({...p, showCurrent: e.target.checked}))} className="accent-orange-500" />
+                     </label>
+                     <label className="flex items-center justify-between text-zinc-400 text-sm cursor-pointer hover:text-white gap-3">
+                        <span>Current Mode</span>
+                        <select
+                            value={appSettings.currentFlowMode}
+                            onChange={e => setAppSettings(p => ({ ...p, currentFlowMode: e.target.value as AppSettings['currentFlowMode'] }))}
+                            className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-orange-500"
+                        >
+                            <option value="conventional">Conventional</option>
+                            <option value="real">Real (electrons)</option>
+                        </select>
                      </label>
                      <label className="flex items-center justify-between text-zinc-400 text-sm cursor-pointer hover:text-white">
                         <span>Smooth Wires</span>
