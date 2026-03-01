@@ -292,6 +292,12 @@ export class CircuitSolver {
              } else {
                  newCurrent = newVoltage * G_off;
              }
+
+             // Non-linear equivalent resistance at the current operating point.
+             // This helps downstream calculations/reports apply Ohm's law consistently.
+             c.simData.resistance = Math.abs(newCurrent) > 1e-12
+                 ? Math.abs(newVoltage / newCurrent)
+                 : 1 / G_off;
         } else if (c.type === ComponentType.Lamp) {
              const R_lamp = 100;
              newCurrent = newVoltage / R_lamp;
