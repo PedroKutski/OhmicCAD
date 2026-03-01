@@ -177,7 +177,7 @@ export class CircuitSolver {
             } else if (c.type === ComponentType.ACSource) {
                 const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
                 const idx = pList.length + vsIdx;
-                const amp = c.props.amplitude || 10;
+                const amp = c.props.amplitude || 20;
                 const freq = c.props.frequency || 60;
                 const val = amp * Math.sin(2 * Math.PI * freq * simTime);
                 // Add 0.1 Ohm internal resistance
@@ -272,7 +272,7 @@ export class CircuitSolver {
         c.simData.current = c.simData.current * (1 - alpha) + newCurrent * alpha;
         
         if (c.type !== ComponentType.Capacitor && c.type !== ComponentType.PolarizedCapacitor && c.type !== ComponentType.Inductor) {
-            c.simData.voltage = Math.abs(newVoltage);
+            c.simData.voltage = c.type === ComponentType.ACSource ? newVoltage : Math.abs(newVoltage);
             if (c.simData.voltage < 1e-6) c.simData.voltage = 0; // Snap small voltages to 0
         }
         c.simData.power = c.simData.voltage * Math.abs(c.simData.current);

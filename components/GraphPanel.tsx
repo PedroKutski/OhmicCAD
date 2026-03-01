@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ComponentModel } from '../types';
+import { ComponentModel, ComponentType } from '../types';
 
 interface GraphConfig {
   id: string;
@@ -19,19 +19,16 @@ interface GraphPanelProps {
 
 const MAX_HISTORY = 2000;
 const MIN_VISIBLE_POINTS = 20;
+const SAMPLE_INTERVAL_S = 0.001;
 
 export const GraphPanel: React.FC<GraphPanelProps> = ({ graphs, components, onRemoveGraph, isSimulating, simTime }) => {
   // Store history per component: Record<componentId, points[]>
   const [data, setData] = useState<Record<string, { time: number, voltage?: number, current?: number }[]>>({});
   const [visiblePoints, setVisiblePoints] = useState(100);
-  const lastUpdateRef = useRef(0);
+  const lastSampleRef = useRef<Record<string, { time: number; voltage: number; current: number }>>({});
 
   useEffect(() => {
     if (!isSimulating) return;
-
-    const now = Date.now();
-    if (now - lastUpdateRef.current < 50) return; // Throttle to 20fps
-    lastUpdateRef.current = now;
 
     setData(prev => {
       const next = { ...prev };
@@ -44,20 +41,61 @@ export const GraphPanel: React.FC<GraphPanelProps> = ({ graphs, components, onRe
         if (!comp) return;
 
         const points = next[compId] || [];
-        const newPoint = { 
-            time: simTime, 
-            voltage: comp.simData.voltage, 
-            current: comp.simData.current 
+        const sourceVoltage = comp.type === ComponentType.ACSource
+          ? (comp.props.amplitude || 20) * Math.sin(2 * Math.PI * (comp.props.frequency || 60) * simTime)
+          : comp.simData.voltage;
+
+        const sample = {
+          time: simTime,
+          voltage: sourceVoltage,
+          current: comp.simData.current
         };
-        
-        const newPoints = [...points, newPoint];
-        if (newPoints.length > MAX_HISTORY) newPoints.shift();
+
+        const previous = lastSampleRef.current[compId];
+        const newPoints = [...points];
+
+        if (!previous || sample.time <= previous.time) {
+          newPoints.push(sample);
+        } else {
+          const span = sample.time - previous.time;
+          if (span > SAMPLE_INTERVAL_S) {
+            const interpolationSteps = Math.min(500, Math.floor(span / SAMPLE_INTERVAL_S));
+            for (let step = 1; step <= interpolationSteps; step++) {
+              const ratio = step / (interpolationSteps + 1);
+              const t = previous.time + span * ratio;
+              const voltage = comp.type === ComponentType.ACSource
+                ? (comp.props.amplitude || 20) * Math.sin(2 * Math.PI * (comp.props.frequency || 60) * t)
+                : previous.voltage + (sample.voltage - previous.voltage) * ratio;
+              const current = previous.current + (sample.current - previous.current) * ratio;
+              newPoints.push({ time: t, voltage, current });
+            }
+          }
+
+          newPoints.push(sample);
+        }
+
+        if (newPoints.length > MAX_HISTORY) {
+          newPoints.splice(0, newPoints.length - MAX_HISTORY);
+        }
+
         next[compId] = newPoints;
+        lastSampleRef.current[compId] = sample;
       });
       
+      Object.keys(lastSampleRef.current).forEach((compId: string) => {
+        if (!activeComponentIds.has(compId)) {
+          delete lastSampleRef.current[compId];
+        }
+      });
+
       return next;
     });
   }, [isSimulating, simTime, graphs, components]);
+
+  useEffect(() => {
+    if (isSimulating) return;
+    lastSampleRef.current = {};
+  }, [isSimulating]);
 
   const handleWheel = (e: React.WheelEvent) => {
       e.stopPropagation();

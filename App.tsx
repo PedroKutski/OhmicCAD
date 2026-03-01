@@ -284,7 +284,7 @@ const App: React.FC = () => {
     else if (type === ComponentType.Resistor) { newComp.props.resistance = 1000; }
     else if (type === ComponentType.Capacitor || type === ComponentType.PolarizedCapacitor) { newComp.props.capacitance = 10; newComp.props.capacitanceUnit = 'µF'; }
     else if (type === ComponentType.Inductor) { newComp.props.inductance = 100e-3; }
-    else if (type === ComponentType.ACSource) { newComp.props.amplitude = 10; newComp.props.frequency = 60; }
+    else if (type === ComponentType.ACSource) { newComp.props.amplitude = 20; newComp.props.frequency = 60; }
     else if (type === ComponentType.Diode) { newComp.props.diodeType = 'rectifier'; }
     else if (type === ComponentType.Lamp) { newComp.props.color = '#ffffaa'; newComp.props.resistance = 100; }
 
