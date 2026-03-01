@@ -103,6 +103,7 @@ export interface AppSettings {
   showGrid: boolean;
   showLabels: boolean;
   showCurrent: boolean;
+  smoothWires: boolean;
   timeStepMultiplier: number; 
   visualFlowSpeed: number; 
 }

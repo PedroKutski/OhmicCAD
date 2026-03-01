@@ -280,7 +280,31 @@ export const drawWire = (
 ) => {
     ctx.strokeStyle = isSelected ? theme.wireSelected : theme.wire;
     ctx.lineWidth = isSelected ? 3 : 2;
-    ctx.beginPath(); w.path.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)); ctx.stroke();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const shouldSmoothWire = !!appSettings.smoothWires && w.path.length > 2;
+
+    ctx.beginPath();
+    if (w.path.length > 0) {
+        ctx.moveTo(w.path[0].x, w.path[0].y);
+
+        if (shouldSmoothWire) {
+            for (let i = 1; i < w.path.length - 1; i++) {
+                const p = w.path[i];
+                const next = w.path[i + 1];
+                const midX = (p.x + next.x) / 2;
+                const midY = (p.y + next.y) / 2;
+                ctx.quadraticCurveTo(p.x, p.y, midX, midY);
+            }
+
+            const end = w.path[w.path.length - 1];
+            ctx.lineTo(end.x, end.y);
+        } else {
+            w.path.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
+        }
+    }
+    ctx.stroke();
     
     if (isSimulating && appSettings.showCurrent && Math.abs(w.simData.current) > 1e-6) {
         const currentDir = Math.sign(w.simData.current);
@@ -288,15 +312,53 @@ export const drawWire = (
         // So we just multiply by current to get distance
         const distance = visualTime * Math.abs(w.simData.current);
         
-        ctx.fillStyle = '#ff0000'; // Red dots
-        for (let i = 0; i < w.path.length - 1; i++) {
-            const p1 = w.path[i], p2 = w.path[i+1];
-            const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-            const step = 20;
-            for (let d = distance % step; d < segLen; d += step) {
-                const t = currentDir > 0 ? d / segLen : 1 - (d / segLen);
-                ctx.beginPath(); ctx.arc(p1.x + (p2.x - p1.x) * t, p1.y + (p2.y - p1.y) * t, 1.5, 0, Math.PI * 2); ctx.fill();
+        const flowPath: { x: number; y: number }[] = [];
+        if (shouldSmoothWire) {
+            const start = w.path[0];
+            flowPath.push({ x: start.x, y: start.y });
+
+            for (let i = 1; i < w.path.length - 1; i++) {
+                const p0 = w.path[i - 1];
+                const p1 = w.path[i];
+                const p2 = w.path[i + 1];
+                const curveStart = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+                const curveEnd = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+                const subdivisions = 8;
+
+                for (let s = 1; s <= subdivisions; s++) {
+                    const t = s / subdivisions;
+                    const oneMinusT = 1 - t;
+                    flowPath.push({
+                        x: (oneMinusT * oneMinusT * curveStart.x) + (2 * oneMinusT * t * p1.x) + (t * t * curveEnd.x),
+                        y: (oneMinusT * oneMinusT * curveStart.y) + (2 * oneMinusT * t * p1.y) + (t * t * curveEnd.y),
+                    });
+                }
             }
+
+            const end = w.path[w.path.length - 1];
+            flowPath.push({ x: end.x, y: end.y });
+        } else {
+            flowPath.push(...w.path);
+        }
+
+        ctx.fillStyle = '#ff0000'; // Red dots
+        const step = 20;
+        let accumulatedLen = 0;
+
+        for (let i = 0; i < flowPath.length - 1; i++) {
+            const p1 = flowPath[i], p2 = flowPath[i + 1];
+            const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            if (segLen < 1e-6) continue;
+
+            const initial = (step - ((distance + accumulatedLen) % step)) % step;
+            for (let d = initial; d < segLen; d += step) {
+                const t = currentDir > 0 ? d / segLen : 1 - (d / segLen);
+                ctx.beginPath();
+                ctx.arc(p1.x + (p2.x - p1.x) * t, p1.y + (p2.y - p1.y) * t, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            accumulatedLen += segLen;
         }
     }
 };
