@@ -7,6 +7,27 @@ const R_OPEN_SWITCH = 1e13; // 10T Ohm
 const R_CAPACITOR_DC = 1e13; 
 const MAX_ITERATIONS = 50; 
 
+const LED_VT = 0.02585;
+
+const linearizeLed = (vd: number, c: ComponentModel) => {
+    const V_fwd = Math.max(0.8, c.props.voltageDrop || 2.0);
+    const ratedCurrent = Math.max(1e-6, c.props.currentRating || 0.02);
+    const n = 2.0;
+    const Is = 2e-12;
+    const exponent = Math.min(40, (vd - V_fwd) / (n * LED_VT));
+    const expTerm = Math.exp(exponent);
+    const I_shockley = Is * (expTerm - 1);
+    const G_shockley = (Is / (n * LED_VT)) * expTerm;
+    // Small series resistance to avoid unrealistically steep currents and improve convergence.
+    const R_series = Math.max(0.5, V_fwd / (ratedCurrent * 20));
+    const G_series = 1 / R_series;
+    const G_total = Math.max(1e-12, (G_shockley * G_series) / (G_shockley + G_series));
+    const I_total = I_shockley + vd / R_series;
+    const I_eq = I_total - G_total * vd;
+
+    return { G: G_total, I_eq };
+};
+
 export class CircuitSolver {
   static solve(components: ComponentModel[], wires: WireModel[], dt: number = 0.1, simTime: number = 0) {
     const voltageSources: ComponentModel[] = components.filter(c => c.type === ComponentType.Battery || c.type === ComponentType.ACSource);
@@ -109,13 +130,13 @@ export class CircuitSolver {
                 B[u] -= I_eq;
                 B[v] += I_eq;
 
-            } else if (c.type === ComponentType.Diode) {
+            } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
                 // Diode Model (Piecewise Linear with Iteration)
                 
                 const u = pMap.get(`${c.id}_0`)!; 
                 const v = pMap.get(`${c.id}_1`)!; 
                 
-                let V_fwd = 0.7;
+                let V_fwd = c.type === ComponentType.LED ? Math.max(0.8, c.props.voltageDrop || 2.0) : 0.7;
                 if (c.props.diodeType === 'schottky') V_fwd = 0.3;
                 
                 const V_zener = c.props.zenerVoltage || 5.6;
@@ -130,7 +151,15 @@ export class CircuitSolver {
                 let Vd = 0;
                 if (iter > 0) Vd = sol[u] - sol[v];
                 
-                if (Vd > V_fwd) {
+                if (c.type === ComponentType.LED) {
+                    if (Vd > 0) {
+                        const { G, I_eq } = linearizeLed(Vd, c);
+                        stampG(u, v, G);
+                        B[u] -= I_eq; B[v] += I_eq;
+                    } else {
+                        stampG(u, v, G_off);
+                    }
+                } else if (Vd > V_fwd) {
                     // Forward Conducting: I = (Vd - V_fwd) / R_on
                     // Linearized: I = G*Vd + I_eq
                     // G = 1/R_on
@@ -237,9 +266,9 @@ export class CircuitSolver {
              
              c.simData.storedCurrent = newCurrent; // Update state
              c.simData.voltage = Math.abs(newVoltage);
-        } else if (c.type === ComponentType.Diode) {
+        } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
              // Reverted to PWL for state update consistency
-             let V_fwd = 0.7;
+             let V_fwd = c.type === ComponentType.LED ? Math.max(0.8, c.props.voltageDrop || 2.0) : 0.7;
              if (c.props.diodeType === 'schottky') V_fwd = 0.3;
 
              const V_zener = c.props.zenerVoltage || 5.6;
@@ -248,7 +277,14 @@ export class CircuitSolver {
 
              const G_off = 1e-10;
 
-             if (newVoltage > V_fwd) {
+             if (c.type === ComponentType.LED) {
+                 if (newVoltage > 0) {
+                    const { G, I_eq } = linearizeLed(newVoltage, c);
+                    newCurrent = G * newVoltage + I_eq;
+                 } else {
+                    newCurrent = newVoltage * G_off;
+                 }
+             } else if (newVoltage > V_fwd) {
                  newCurrent = (newVoltage - V_fwd) / R_on;
              } else if (c.props.diodeType === 'zener' && newVoltage < -V_zener) {
                  newCurrent = (newVoltage + V_zener) / R_on;

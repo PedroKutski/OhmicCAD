@@ -378,6 +378,39 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
       );
   };
 
+
+  const renderLedProps = () => {
+      const comp = target as ComponentModel;
+      return (
+          <div className="space-y-4">
+              <div>
+                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Forward Voltage (V)</label>
+                  <input
+                      type="number"
+                      min={0.8}
+                      step={0.1}
+                      value={comp.props.voltageDrop || 2.0}
+                      onChange={(e) => onUpdateCompProps(comp.id, { voltageDrop: parseFloat(e.target.value) })}
+                      className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
+                  />
+              </div>
+              <div>
+                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Rated Current (A)</label>
+                  <input
+                      type="number"
+                      min={0.001}
+                      step={0.001}
+                      value={comp.props.currentRating || 0.02}
+                      onChange={(e) => onUpdateCompProps(comp.id, { currentRating: parseFloat(e.target.value) })}
+                      className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
+                  />
+              </div>
+              {renderGenericInput('ledColor', comp.props.ledColor || '#ff4d4d', (v) => onUpdateCompProps(comp.id, { ledColor: v }))}
+              {renderGenericInput('name', comp.props.name, (v) => onUpdateCompProps(comp.id, { name: v }))}
+          </div>
+      );
+  };
+
   const renderLightProps = () => {
       const comp = target as ComponentModel;
       return (
@@ -399,6 +432,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
     if (type === ComponentType.Capacitor) return renderCapacitorProps();
     if (type === ComponentType.Inductor) return renderInductorProps();
     if (type === ComponentType.Diode) return renderDiodeProps();
+    if (type === ComponentType.LED) return renderLedProps();
     if (type === ComponentType.Lamp) return renderLightProps();
     return renderGenericComponentProps();
   };

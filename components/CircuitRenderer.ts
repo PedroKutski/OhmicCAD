@@ -172,6 +172,51 @@ export const drawComponent = (
         ctx.stroke();
         break;
 
+
+      case ComponentType.LED:
+        // Terminals
+        ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-15, 0); ctx.moveTo(40, 0); ctx.lineTo(15, 0); ctx.stroke();
+
+        // Diode body
+        ctx.beginPath();
+        ctx.moveTo(-15, -15);
+        ctx.lineTo(-15, 15);
+        ctx.lineTo(15, 0);
+        ctx.closePath();
+        ctx.stroke();
+
+        // Cathode line
+        ctx.beginPath();
+        ctx.moveTo(15, -15); ctx.lineTo(15, 15);
+        ctx.stroke();
+
+        // Light arrows
+        const ledColor = c.props.ledColor || '#ff4d4d';
+        ctx.strokeStyle = ledColor;
+        ctx.beginPath();
+        ctx.moveTo(18, -8); ctx.lineTo(28, -18);
+        ctx.moveTo(25, -18); ctx.lineTo(28, -18); ctx.lineTo(28, -15);
+        ctx.moveTo(10, -2); ctx.lineTo(20, -12);
+        ctx.moveTo(17, -12); ctx.lineTo(20, -12); ctx.lineTo(20, -9);
+        ctx.stroke();
+
+        if (isSimulating && Math.abs(c.simData.current) > 1e-4) {
+            const intensity = Math.min(1, Math.abs(c.simData.current) / Math.max(1e-6, c.props.currentRating || 0.02));
+            ctx.fillStyle = `rgba(255, 80, 80, ${0.15 + 0.45 * intensity})`;
+            ctx.shadowColor = ledColor;
+            ctx.shadowBlur = 18 * intensity;
+            ctx.beginPath();
+            ctx.moveTo(-15, -15);
+            ctx.lineTo(-15, 15);
+            ctx.lineTo(15, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        ctx.strokeStyle = isSelected ? theme.selected : theme.componentStroke;
+        break;
+
       case ComponentType.Lamp:
         // Terminals
         ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-20, 0); ctx.moveTo(40, 0); ctx.lineTo(20, 0); ctx.stroke();
@@ -263,6 +308,8 @@ export const drawComponent = (
         } else if (c.type === ComponentType.ACSource) {
             if (c.props.amplitude !== undefined) valueStr += formatUnit(c.props.amplitude, 'V');
             if (c.props.frequency !== undefined) valueStr += ` ${formatUnit(c.props.frequency, 'Hz')}`;
+        } else if (c.type === ComponentType.LED) {
+            valueStr = `Vf ${formatUnit(c.props.voltageDrop || 2, 'V')}`;
         }
         
         const text = `${label}   ${valueStr}`.trim();

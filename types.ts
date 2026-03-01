@@ -9,6 +9,7 @@ export enum ComponentType {
   Inductor = 'inductor',
   ACSource = 'ac_source',
   Diode = 'diode',
+  LED = 'led',
   Lamp = 'lamp',
   Junction = 'junction',
 }
@@ -43,7 +44,8 @@ export interface ComponentProps {
   currentRating?: number; 
   voltageDrop?: number; // Forward voltage drop for diodes
   zenerVoltage?: number; // Breakdown voltage for Zener
-  diodeType?: 'rectifier' | 'zener' | 'schottky';
+  diodeType?: 'rectifier' | 'zener' | 'schottky' | 'led';
+  ledColor?: string;
   beta?: number; // For BJT
   thresholdVoltage?: number; // For MOSFET
   transconductance?: number; // For MOSFET
