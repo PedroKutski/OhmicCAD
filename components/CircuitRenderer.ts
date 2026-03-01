@@ -193,6 +193,8 @@ export const drawComponent = (
         // Component current sign from solver follows port orientation (0 -> 1).
         // Conventional flow in the symbol is rendered opposite to that sign.
         const baseDirection = -Math.sign(c.simData.current);
+        // Merge-conflict resolution: keep REAL mode on base direction and
+        // CONVENTIONAL mode inverted from electron flow.
         const flowModeSign = appSettings.currentFlowMode === 'real' ? 1 : -1;
         const currentDir = baseDirection * flowModeSign;
         const distance = visualTime * Math.abs(c.simData.current);
@@ -314,6 +316,8 @@ export const drawWire = (
         // Wire current sign is computed along the wire path (point A -> point B).
         // Keep the default in conventional mode, and allow inversion for real flow.
         const baseDirection = Math.sign(w.simData.current);
+        // Merge-conflict resolution: keep REAL mode on base direction and
+        // CONVENTIONAL mode inverted from electron flow.
         const flowModeSign = appSettings.currentFlowMode === 'real' ? 1 : -1;
         const currentDir = baseDirection * flowModeSign;
         // visualTimeRef already accumulates (dt * visualFlowSpeed)
