@@ -642,6 +642,15 @@ const App: React.FC = () => {
       };
 
       const getDetailedCalculationNotebook = (component: ComponentModel) => {
+          const fmt = (value: number, maxFractionDigits = 12) => {
+              if (!Number.isFinite(value)) return '0';
+              const normalized = Math.abs(value) < 1e-12 ? 0 : value;
+              return normalized.toLocaleString('pt-BR', {
+                  useGrouping: false,
+                  maximumFractionDigits: maxFractionDigits
+              });
+          };
+
           const name = component.props.name || component.id.substring(0, 6);
           const V = component.simData.voltage || 0;
           const I = component.simData.current || 0;
@@ -649,7 +658,7 @@ const App: React.FC = () => {
 
           const lines: string[] = [
               `Componente: ${name} (${component.type})`,
-              `Dados da simulação: V = ${V.toExponential(6)} V, I = ${I.toExponential(6)} A, P = ${P.toExponential(6)} W`
+              `Dados da simulação: V = ${fmt(V)} V, I = ${fmt(I)} A, P = ${fmt(P)} W`
           ];
 
           if (component.type === ComponentType.Resistor) {
@@ -661,20 +670,20 @@ const App: React.FC = () => {
               const pFromV2R = R !== 0 ? (V * V) / R : 0;
               lines.push(
                   `1) Lei de Ohm (tensão): V = I × R`,
-                  `   Substituindo: V = (${I.toExponential(6)}) × (${R.toExponential(6)})`,
-                  `   Resultado: V = ${vFromOhm.toExponential(6)} V`,
+                  `   Substituindo: V = (${fmt(I)}) × (${fmt(R)})`,
+                  `   Resultado: V = ${fmt(vFromOhm)} V`,
                   `2) Lei de Ohm (corrente): I = V / R`,
-                  `   Substituindo: I = (${V.toExponential(6)}) / (${R.toExponential(6)})`,
-                  `   Resultado: I = ${iFromOhm.toExponential(6)} A`,
+                  `   Substituindo: I = (${fmt(V)}) / (${fmt(R)})`,
+                  `   Resultado: I = ${fmt(iFromOhm)} A`,
                   `3) Potência pela forma básica: P = V × I`,
-                  `   Substituindo: P = (${V.toExponential(6)}) × (${I.toExponential(6)})`,
-                  `   Resultado: P = ${pFromVI.toExponential(6)} W`,
+                  `   Substituindo: P = (${fmt(V)}) × (${fmt(I)})`,
+                  `   Resultado: P = ${fmt(pFromVI)} W`,
                   `4) Potência alternativa: P = I² × R`,
-                  `   Substituindo: P = (${I.toExponential(6)})² × (${R.toExponential(6)})`,
-                  `   Resultado: P = ${pFromI2R.toExponential(6)} W`,
+                  `   Substituindo: P = (${fmt(I)})² × (${fmt(R)})`,
+                  `   Resultado: P = ${fmt(pFromI2R)} W`,
                   `5) Potência alternativa: P = V² / R`,
-                  `   Substituindo: P = (${V.toExponential(6)})² / (${R.toExponential(6)})`,
-                  `   Resultado: P = ${pFromV2R.toExponential(6)} W`
+                  `   Substituindo: P = (${fmt(V)})² / (${fmt(R)})`,
+                  `   Resultado: P = ${fmt(pFromV2R)} W`
               );
           } else if (component.type === ComponentType.Capacitor || component.type === ComponentType.PolarizedCapacitor) {
               const C = component.props.capacitance || 0;
@@ -684,14 +693,14 @@ const App: React.FC = () => {
               lines.push(
                   `1) Corrente no capacitor: I = C × dV/dt`,
                   `   Reorganizando: dV/dt = I / C`,
-                  `   Substituindo: dV/dt = (${I.toExponential(6)}) / (${C.toExponential(6)})`,
-                  `   Resultado: dV/dt = ${dvdt.toExponential(6)} V/s`,
+                  `   Substituindo: dV/dt = (${fmt(I)}) / (${fmt(C)})`,
+                  `   Resultado: dV/dt = ${fmt(dvdt)} V/s`,
                   `2) Carga armazenada: Q = C × V`,
-                  `   Substituindo: Q = (${C.toExponential(6)}) × (${V.toExponential(6)})`,
-                  `   Resultado: Q = ${charge.toExponential(6)} C`,
+                  `   Substituindo: Q = (${fmt(C)}) × (${fmt(V)})`,
+                  `   Resultado: Q = ${fmt(charge)} C`,
                   `3) Energia armazenada: E = 0.5 × C × V²`,
-                  `   Substituindo: E = 0.5 × (${C.toExponential(6)}) × (${V.toExponential(6)})²`,
-                  `   Resultado: E = ${energy.toExponential(6)} J`
+                  `   Substituindo: E = 0.5 × (${fmt(C)}) × (${fmt(V)})²`,
+                  `   Resultado: E = ${fmt(energy)} J`
               );
           } else if (component.type === ComponentType.Inductor) {
               const L = component.props.inductance || 0;
@@ -700,21 +709,21 @@ const App: React.FC = () => {
               lines.push(
                   `1) Tensão no indutor: V = L × dI/dt`,
                   `   Reorganizando: dI/dt = V / L`,
-                  `   Substituindo: dI/dt = (${V.toExponential(6)}) / (${L.toExponential(6)})`,
-                  `   Resultado: dI/dt = ${didt.toExponential(6)} A/s`,
+                  `   Substituindo: dI/dt = (${fmt(V)}) / (${fmt(L)})`,
+                  `   Resultado: dI/dt = ${fmt(didt)} A/s`,
                   `2) Energia armazenada: E = 0.5 × L × I²`,
-                  `   Substituindo: E = 0.5 × (${L.toExponential(6)}) × (${I.toExponential(6)})²`,
-                  `   Resultado: E = ${energy.toExponential(6)} J`,
-                  `3) Verificação de potência instantânea: P = V × I = (${V.toExponential(6)}) × (${I.toExponential(6)}) = ${(V * I).toExponential(6)} W`
+                  `   Substituindo: E = 0.5 × (${fmt(L)}) × (${fmt(I)})²`,
+                  `   Resultado: E = ${fmt(energy)} J`,
+                  `3) Verificação de potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
           } else if (component.type === ComponentType.Battery) {
               const sourceV = component.props.voltage || 0;
               lines.push(
                   `1) Fonte DC ideal: Vfonte = constante`,
-                  `   Valor configurado: Vfonte = ${sourceV.toExponential(6)} V`,
+                  `   Valor configurado: Vfonte = ${fmt(sourceV)} V`,
                   `2) Potência entregue/absorvida: P = V × I`,
-                  `   Substituindo: P = (${V.toExponential(6)}) × (${I.toExponential(6)})`,
-                  `   Resultado: P = ${(V * I).toExponential(6)} W`
+                  `   Substituindo: P = (${fmt(V)}) × (${fmt(I)})`,
+                  `   Resultado: P = ${fmt(V * I)} W`
               );
           } else if (component.type === ComponentType.ACSource) {
               const amplitude = component.props.amplitude || 0;
@@ -723,14 +732,14 @@ const App: React.FC = () => {
               const vrms = amplitude / Math.sqrt(2);
               lines.push(
                   `1) Fonte senoidal: v(t) = A × sen(ωt)`,
-                  `   A = ${amplitude.toExponential(6)} V, f = ${frequency.toExponential(6)} Hz`,
+                  `   A = ${fmt(amplitude)} V, f = ${fmt(frequency)} Hz`,
                   `2) Frequência angular: ω = 2πf`,
-                  `   Substituindo: ω = 2π × (${frequency.toExponential(6)})`,
-                  `   Resultado: ω = ${omega.toExponential(6)} rad/s`,
+                  `   Substituindo: ω = 2π × (${fmt(frequency)})`,
+                  `   Resultado: ω = ${fmt(omega)} rad/s`,
                   `3) Tensão eficaz: Vrms = A/√2`,
-                  `   Substituindo: Vrms = (${amplitude.toExponential(6)})/√2`,
-                  `   Resultado: Vrms = ${vrms.toExponential(6)} V`,
-                  `4) Potência instantânea no passo atual: P = V × I = (${V.toExponential(6)}) × (${I.toExponential(6)}) = ${(V * I).toExponential(6)} W`
+                  `   Substituindo: Vrms = (${fmt(amplitude)})/√2`,
+                  `   Resultado: Vrms = ${fmt(vrms)} V`,
+                  `4) Potência instantânea no passo atual: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
           } else if (component.type === ComponentType.Diode) {
               const vt = 0.02585;
@@ -739,16 +748,16 @@ const App: React.FC = () => {
               const approxI = is * (Math.exp(Math.max(Math.min(expArg, 40), -40)) - 1);
               lines.push(
                   `1) Modelo de Shockley: I = Is × (e^(Vd/Vt) - 1)`,
-                  `   Assumindo Is = ${is.toExponential(6)} A e Vt = ${vt.toExponential(6)} V`,
-                  `2) Substituindo: I = ${is.toExponential(6)} × (e^(${V.toExponential(6)}/${vt.toExponential(6)}) - 1)`,
-                  `   Resultado aproximado: I = ${approxI.toExponential(6)} A`,
-                  `3) Potência instantânea: P = V × I = (${V.toExponential(6)}) × (${I.toExponential(6)}) = ${(V * I).toExponential(6)} W`
+                  `   Assumindo Is = ${fmt(is)} A e Vt = ${fmt(vt)} V`,
+                  `2) Substituindo: I = ${fmt(is)} × (e^(${fmt(V)}/${fmt(vt)}) - 1)`,
+                  `   Resultado aproximado: I = ${fmt(approxI)} A`,
+                  `3) Potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
           } else {
               lines.push(
                   `1) Relação geral de potência: P = V × I`,
-                  `   Substituindo: P = (${V.toExponential(6)}) × (${I.toExponential(6)})`,
-                  `   Resultado: P = ${(V * I).toExponential(6)} W`
+                  `   Substituindo: P = (${fmt(V)}) × (${fmt(I)})`,
+                  `   Resultado: P = ${fmt(V * I)} W`
               );
           }
 
