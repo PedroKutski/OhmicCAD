@@ -190,7 +190,10 @@ export const drawComponent = (
     // Current Flow Visualization inside Component
     if (isSimulating && appSettings.showCurrent && Math.abs(c.simData.current) > 1e-6) {
         // We are already transformed/rotated
-        const currentDir = Math.sign(c.simData.current);
+        // Solver current sign follows the matrix port orientation (port 0 -> port 1).
+        // For the visual animation we invert this so dots follow the conventional
+        // current direction users expect in the canvas.
+        const currentDir = -Math.sign(c.simData.current);
         const distance = visualTime * Math.abs(c.simData.current);
         
         let path: {x: number, y: number}[] = [];
@@ -307,7 +310,9 @@ export const drawWire = (
     ctx.stroke();
     
     if (isSimulating && appSettings.showCurrent && Math.abs(w.simData.current) > 1e-6) {
-        const currentDir = Math.sign(w.simData.current);
+        // Keep wire particle flow aligned with the same conventional direction
+        // used for components in the UI.
+        const currentDir = -Math.sign(w.simData.current);
         // visualTimeRef already accumulates (dt * visualFlowSpeed)
         // So we just multiply by current to get distance
         const distance = visualTime * Math.abs(w.simData.current);
