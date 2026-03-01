@@ -13,6 +13,7 @@ import { CircuitSolver } from './services/Solver';
 import { jsPDF } from "jspdf";
 import jspdfAutotable from 'jspdf-autotable';
 import { GraphPanel } from './components/GraphPanel';
+import { CircuitLibraryModal } from './components/CircuitLibraryModal';
 
 const VISUAL_SPEEDS = [0, 1, 5, 10, 100, 1000, 5000, 20000];
 
@@ -46,6 +47,7 @@ const App: React.FC = () => {
   const wiresRef = useRef(wires);
   const canvasRef = useRef<CircuitCanvasHandle>(null);
   const [showProperties, setShowProperties] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [statusMsg, setStatusMsg] = useState("Ready.");
 
   // Context Menu & Graphs
@@ -811,10 +813,34 @@ const App: React.FC = () => {
       }
   };
 
+  const handleLoadCircuit = (id: string, data?: any) => {
+      if (data) {
+          const circuit = data(); // Assuming data is a generator function
+          updateStateWithHistory(circuit.components, circuit.wires);
+          setStatusMsg(`Loaded example: ${id}`);
+          setShowLibrary(false);
+          resetSimulation();
+      } else {
+          setStatusMsg(`Example '${id}' not implemented yet.`);
+      }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#1a1a1a] select-none" onClick={() => { setContextMenu(null); if (!editPanel) setEditPanel(null); }}>
       <Sidebar onPlace={(type) => !isSimulating && setPlacementMode({ type, rotation: 0 })} isSimulating={isSimulating} />
       <div className="flex-1 relative h-full flex flex-col min-w-0">
+        
+        {/* Top Bar */}
+        <div className="absolute top-4 left-4 z-40 flex gap-2 pointer-events-auto">
+             <button 
+                onClick={() => setShowLibrary(true)}
+                className="px-3 py-2 bg-[#252525] border border-zinc-700 hover:bg-zinc-700 text-white text-xs font-bold rounded shadow-lg flex items-center gap-2 transition-colors"
+            >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                Circuits
+            </button>
+        </div>
+
         <CircuitCanvas 
             ref={canvasRef} 
             components={components} 
@@ -963,6 +989,12 @@ const App: React.FC = () => {
                     </button>
                 </div>
             </div>
+        )}
+        {showLibrary && (
+            <CircuitLibraryModal 
+                onClose={() => setShowLibrary(false)} 
+                onLoadCircuit={handleLoadCircuit} 
+            />
         )}
         {showProperties && selectedIds.length > 0 && <div className="absolute top-0 right-0 bottom-0 z-20"><PropertiesPanel target={components.find(c => c.id === selectedIds[0]) || wires.find(w => w.id === selectedIds[0])} onUpdateCompProps={(id, p) => setComponents(prev => prev.map(c => c.id === id ? { ...c, props: { ...c.props, ...p } } : c))} onUpdateWireProps={(id, p) => setWires(prev => prev.map(w => w.id === id ? { ...w, props: { ...w.props, ...p } } : w))} /></div>}
       </div>
