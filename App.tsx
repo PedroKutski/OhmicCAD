@@ -744,17 +744,30 @@ const App: React.FC = () => {
                   `4) Potência instantânea no passo atual: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
           } else if (component.type === ComponentType.Diode || component.type === ComponentType.LED) {
-              const vt = 0.02585;
-              const is = 1e-12;
-              const expArg = V / vt;
-              const approxI = is * (Math.exp(Math.max(Math.min(expArg, 40), -40)) - 1);
-              lines.push(
-                  `1) Modelo de Shockley: I = Is × (e^(Vd/Vt) - 1)`,
-                  `   Assumindo Is = ${fmt(is)} A e Vt = ${fmt(vt)} V`,
-                  `2) Substituindo: I = ${fmt(is)} × (e^(${fmt(V)}/${fmt(vt)}) - 1)`,
-                  `   Resultado aproximado: I = ${fmt(approxI)} A`,
-                  `3) Potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
-              );
+              const safeI = Math.abs(I) > 1e-12 ? I : 0;
+              const rEq = safeI !== 0 ? V / safeI : Number.POSITIVE_INFINITY;
+              const vFromOhm = I * (Number.isFinite(rEq) ? rEq : 0);
+
+              if (component.type === ComponentType.LED) {
+                  const vfNominal = component.props.voltageDrop || 2.0;
+                  const ifNominal = component.props.currentRating || 0.02;
+                  lines.push(
+                      `1) Queda de tensão no LED (nó ânodo-cátodo): VLED = V(anodo) - V(catodo) = ${fmt(V)} V`,
+                      `2) Corrente no ramo do LED (KCL/KVL pela posição no circuito): ILED = ${fmt(I)} A`,
+                      `3) Lei de Ohm no ponto de operação: V = I × R_eq`,
+                      `   R_eq = V/I = (${fmt(V)})/(${fmt(I)}) = ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
+                      `   Verificação: V = I × R_eq = (${fmt(I)}) × (${Number.isFinite(rEq) ? fmt(rEq) : '∞'}) = ${fmt(vFromOhm)} V`,
+                      `4) Comparação com o LED nominal: Vf≈${fmt(vfNominal)} V em If≈${fmt(ifNominal)} A`,
+                      `5) Potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
+                  );
+              } else {
+                  lines.push(
+                      `1) Queda no diodo: Vd = V(anodo) - V(catodo) = ${fmt(V)} V`,
+                      `2) Corrente no diodo: Id = ${fmt(I)} A`,
+                      `3) Resistência equivalente no ponto de operação: R_eq = Vd/Id = ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
+                      `4) Potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
+                  );
+              }
           } else {
               lines.push(
                   `1) Relação geral de potência: P = V × I`,
