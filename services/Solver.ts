@@ -15,7 +15,9 @@ const linearizeLed = (vd: number, c: ComponentModel) => {
     const n = 2.0;
     // Calibrate Is so the Shockley model reaches the rated current near V_fwd.
     const Is = ratedCurrent / (Math.exp(V_fwd / (n * LED_VT)) - 1);
-    const exponent = Math.min(40, (vd - V_fwd) / (n * LED_VT));
+    // Use the actual diode voltage in Shockley equation.
+    // Subtracting V_fwd here forces I(V_fwd)≈0A and breaks LED/resistor balancing.
+    const exponent = Math.min(40, vd / (n * LED_VT));
     const expTerm = Math.exp(exponent);
     const I_shockley = Is * (expTerm - 1);
     const G_shockley = (Is / (n * LED_VT)) * expTerm;
