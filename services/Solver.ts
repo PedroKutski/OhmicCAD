@@ -6,29 +6,44 @@ const R_CLOSED_SWITCH = 0.001;
 const R_OPEN_SWITCH = 1e13; // 10T Ohm
 const R_CAPACITOR_DC = 1e13; 
 const MAX_ITERATIONS = 50; 
+const NEWTON_TOLERANCE = 1e-9;
 
 const LED_VT = 0.02585;
 
 const linearizeLed = (vd: number, c: ComponentModel) => {
-    const V_fwd = Math.max(0.8, c.props.voltageDrop || 2.0);
-    const ratedCurrent = Math.max(1e-6, c.props.currentRating || 0.02);
+    const V_fwdNominal = Math.max(0.8, c.props.voltageDrop || 2.0);
+    const ratedCurrent = Math.max(1e-9, c.props.currentRating || 0.02);
     const n = 2.0;
-    // Calibrate Is so the Shockley model reaches the rated current near V_fwd.
-    const Is = ratedCurrent / (Math.exp(V_fwd / (n * LED_VT)) - 1);
-    // Use the actual diode voltage in Shockley equation.
-    // Subtracting V_fwd here forces I(V_fwd)≈0A and breaks LED/resistor balancing.
-    const exponent = Math.min(40, vd / (n * LED_VT));
+    const R_series = Math.max(0.5, V_fwdNominal / Math.max(1e-9, ratedCurrent * 40));
+    const thermal = n * LED_VT;
+    const junctionNominal = Math.max(0.1, V_fwdNominal - ratedCurrent * R_series);
+    const denom = Math.exp(Math.min(80, junctionNominal / thermal)) - 1;
+    const Is = Math.max(1e-30, ratedCurrent / Math.max(1e-12, denom));
+
+    // Solve I = Is * (exp((V - I*Rs)/(nVt)) - 1) with Newton iterations.
+    let current = vd > 0 ? Math.max(0, (vd - V_fwdNominal) / Math.max(0.5, R_series)) : -Is;
+    for (let k = 0; k < 12; k++) {
+        const junctionVoltage = vd - current * R_series;
+        const exponent = Math.min(80, Math.max(-40, junctionVoltage / thermal));
+        const expTerm = Math.exp(exponent);
+        const shockleyCurrent = Is * (expTerm - 1);
+        const residual = current - shockleyCurrent;
+        const derivative = 1 + (Is * expTerm * R_series) / thermal;
+        const step = residual / Math.max(1e-12, derivative);
+        current -= step;
+        if (Math.abs(step) < 1e-12) break;
+    }
+
+    const junctionVoltage = vd - current * R_series;
+    const exponent = Math.min(80, Math.max(-40, junctionVoltage / thermal));
     const expTerm = Math.exp(exponent);
-    const I_shockley = Is * (expTerm - 1);
-    const G_shockley = (Is / (n * LED_VT)) * expTerm;
+    const gd = (Is * expTerm) / thermal;
 
-    // Bound dynamic conductance to keep Newton steps stable and avoid kV artifacts.
-    const G_min = 1e-10;
-    const G_max = ratedCurrent / Math.max(0.2, V_fwd * 0.1);
-    const G_total = Math.min(G_max, Math.max(G_min, G_shockley));
-    const I_eq = I_shockley - G_total * vd;
+    // Small-signal conductance of diode+series resistor.
+    const G = Math.max(1e-10, gd / (1 + gd * R_series));
+    const I_eq = current - G * vd;
 
-    return { G: G_total, I_eq };
+    return { G, I_eq, current };
 };
 
 export class CircuitSolver {
@@ -221,12 +236,16 @@ export class CircuitSolver {
         for(let i=0; i<pList.length; i++) A[i][i] += G_MIN;
         A[0].fill(0); A[0][0] = 1; B[0] = 0;
         
+        const previousSol = sol;
         sol = CircuitSolver.solveLinearMatrix(A, B);
         if (sol.some(isNaN)) {
             console.warn("Solver produced NaN, resetting simulation state.");
             sol.fill(0);
             return; // Abort this step
         }
+
+        const maxDelta = sol.reduce((m, v, i) => Math.max(m, Math.abs(v - previousSol[i])), 0);
+        if (maxDelta < NEWTON_TOLERANCE) break;
     }
     
     // Update State
@@ -282,8 +301,8 @@ export class CircuitSolver {
 
              if (c.type === ComponentType.LED) {
                  if (newVoltage > 0) {
-                    const { G, I_eq } = linearizeLed(newVoltage, c);
-                    newCurrent = G * newVoltage + I_eq;
+                    const { current } = linearizeLed(newVoltage, c);
+                    newCurrent = current;
                  } else {
                     newCurrent = newVoltage * G_off;
                  }
