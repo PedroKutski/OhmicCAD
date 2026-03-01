@@ -103,6 +103,7 @@ export interface AppSettings {
   showGrid: boolean;
   showLabels: boolean;
   showCurrent: boolean;
+  smoothWires: boolean;
   timeStepMultiplier: number; 
   visualFlowSpeed: number; 
 }
@@ -139,4 +140,3 @@ export const THEME: Theme = {
   textSecondary: '#aaaaaa',
   background: '#1a1a1a'
 };
-

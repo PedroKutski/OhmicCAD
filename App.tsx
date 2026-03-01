@@ -36,7 +36,7 @@ const App: React.FC = () => {
   const [placementMode, setPlacementMode] = useState<{ type: ComponentType; rotation: number } | null>(null);
   const [connectionStart, setConnectionStart] = useState<{ compId: string; portId: number } | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(() => loadInitialState('ohmic_settings', {
-      showGrid: true, showLabels: true, showCurrent: true, timeStepMultiplier: 1.0, visualFlowSpeed: 1000
+      showGrid: true, showLabels: true, showCurrent: true, smoothWires: false, timeStepMultiplier: 1.0, visualFlowSpeed: 1000
   }));
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -980,6 +980,10 @@ const App: React.FC = () => {
                      <label className="flex items-center justify-between text-zinc-400 text-sm cursor-pointer hover:text-white">
                         <span>Show Current</span>
                         <input type="checkbox" checked={appSettings.showCurrent} onChange={e => setAppSettings(p => ({...p, showCurrent: e.target.checked}))} className="accent-orange-500" />
+                     </label>
+                     <label className="flex items-center justify-between text-zinc-400 text-sm cursor-pointer hover:text-white">
+                        <span>Smooth Wires</span>
+                        <input type="checkbox" checked={appSettings.smoothWires} onChange={e => setAppSettings(p => ({ ...p, smoothWires: e.target.checked }))} className="accent-orange-500" />
                      </label>
                 </div>
                 <div className="border-t border-zinc-700 pt-3">
