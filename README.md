@@ -18,3 +18,27 @@ View your app in AI Studio: https://ai.studio/apps/85cd801a-10b5-4948-9e13-3adfd
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Roadmap
+
+- Melhorar a robustez e a precisão do solver elétrico.
+- Criar templates de circuitos para casos de uso comuns.
+- Evoluir a UX da biblioteca de componentes.
+
+## Contribuição
+
+Fluxo básico para contribuir:
+
+1. Abra uma issue descrevendo bug, melhoria ou nova funcionalidade.
+2. Faça um fork/branch com uma alteração focada.
+3. Envie um Pull Request referenciando a issue.
+4. Ajuste o PR conforme revisão até aprovação.
+
+## Licença
+
+**Definir:** arquivo de licença ainda não identificado no repositório raiz.
+
+## Contato / Autor
+
+- **Autor:** definir.
+- **Contato:** definir.

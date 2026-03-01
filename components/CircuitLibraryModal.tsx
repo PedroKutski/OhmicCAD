@@ -7,7 +7,7 @@ interface CircuitLibraryModalProps {
 }
 
 export const CircuitLibraryModal: React.FC<CircuitLibraryModalProps> = ({ onClose, onLoadCircuit }) => {
-    const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['Basics']));
+    const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
     const toggleCategory = (name: string) => {
         const next = new Set(expandedCategories);
@@ -65,10 +65,16 @@ export const CircuitLibraryModal: React.FC<CircuitLibraryModalProps> = ({ onClos
                     </button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2">
-                    {CIRCUIT_LIBRARY.map(cat => renderItem(cat))}
+                    {CIRCUIT_LIBRARY.length === 0 ? (
+                        <div className="h-full flex items-center justify-center text-zinc-500 text-sm">
+                            Biblioteca de circuitos vazia por enquanto.
+                        </div>
+                    ) : (
+                        CIRCUIT_LIBRARY.map(cat => renderItem(cat))
+                    )}
                 </div>
                 <div className="p-3 border-t border-zinc-700 bg-[#252525] text-[10px] text-zinc-500 text-center">
-                    Select a circuit to load. Note: Many examples are placeholders.
+                    Biblioteca temporariamente sem exemplos.
                 </div>
             </div>
         </div>
