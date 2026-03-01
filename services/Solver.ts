@@ -109,27 +109,21 @@ export class CircuitSolver {
                 B[u] -= I_eq;
                 B[v] += I_eq;
 
-            } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
+            } else if (c.type === ComponentType.Diode) {
                 // Diode Model (Piecewise Linear with Iteration)
-                // Reverted to PWL based on user feedback: "LED voltage is just a limit, the rest is calculated"
                 
                 const u = pMap.get(`${c.id}_0`)!; 
                 const v = pMap.get(`${c.id}_1`)!; 
                 
                 let V_fwd = 0.7;
                 if (c.props.diodeType === 'schottky') V_fwd = 0.3;
-                if (c.type === ComponentType.LED) V_fwd = c.props.voltageDrop || 2.0;
                 
                 const V_zener = c.props.zenerVoltage || 5.6;
                 
                 // Dynamic Resistance (Slope)
-                // 5.0 Ohms allows voltage to rise slightly with current (V = Vfwd + I*R),
-                // satisfying "calculated" behavior without being "disproportionate" (like 25 Ohms was).
                 let R_on = 0.1;
-                if (c.type === ComponentType.LED) R_on = 5.0; 
 
                 // Off Conductance
-                // 1e-10 (10G Ohm) ensures 0V when disconnected (fixes "ghost voltage" issue)
                 const G_off = 1e-10; 
 
                 // Get voltage from previous iteration
@@ -243,16 +237,14 @@ export class CircuitSolver {
              
              c.simData.storedCurrent = newCurrent; // Update state
              c.simData.voltage = Math.abs(newVoltage);
-        } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
+        } else if (c.type === ComponentType.Diode) {
              // Reverted to PWL for state update consistency
              let V_fwd = 0.7;
              if (c.props.diodeType === 'schottky') V_fwd = 0.3;
-             if (c.type === ComponentType.LED) V_fwd = c.props.voltageDrop || 2.0;
 
              const V_zener = c.props.zenerVoltage || 5.6;
              
              let R_on = 0.1;
-             if (c.type === ComponentType.LED) R_on = 5.0;
 
              const G_off = 1e-10;
 

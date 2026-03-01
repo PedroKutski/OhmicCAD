@@ -384,13 +384,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
           <div className="space-y-4">
               {renderGenericInput('color', comp.props.color || '#ff0000', (v) => onUpdateCompProps(comp.id, { color: v }))}
               
-              {comp.type === ComponentType.LED && (
-                  <>
-                    {renderGenericInput('voltageDrop', comp.props.voltageDrop || 2.0, (v) => onUpdateCompProps(comp.id, { voltageDrop: parseFloat(v) }))}
-                    {renderGenericInput('maxCurrent', comp.props.maxCurrent || 0.02, (v) => onUpdateCompProps(comp.id, { maxCurrent: parseFloat(v) }))}
-                  </>
-              )}
-
               {comp.type === ComponentType.Lamp && (
                   renderGenericInput('resistance', comp.props.resistance || 100, (v) => onUpdateCompProps(comp.id, { resistance: parseFloat(v) }))
               )}
@@ -406,7 +399,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
     if (type === ComponentType.Capacitor) return renderCapacitorProps();
     if (type === ComponentType.Inductor) return renderInductorProps();
     if (type === ComponentType.Diode) return renderDiodeProps();
-    if (type === ComponentType.LED || type === ComponentType.Lamp) return renderLightProps();
+    if (type === ComponentType.Lamp) return renderLightProps();
     return renderGenericComponentProps();
   };
 

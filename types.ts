@@ -9,7 +9,6 @@ export enum ComponentType {
   Inductor = 'inductor',
   ACSource = 'ac_source',
   Diode = 'diode',
-  LED = 'led',
   Lamp = 'lamp',
   Junction = 'junction',
 }
@@ -48,7 +47,7 @@ export interface ComponentProps {
   beta?: number; // For BJT
   thresholdVoltage?: number; // For MOSFET
   transconductance?: number; // For MOSFET
-  color?: string; // For LED/Lamp
+  color?: string; // For Lamp
   power?: number;
   resistance?: number;
   capacitance?: number;

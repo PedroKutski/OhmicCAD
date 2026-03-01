@@ -251,7 +251,6 @@ const App: React.FC = () => {
         case ComponentType.Switch: 
         case ComponentType.PushButton: prefix = 'S'; break;
         case ComponentType.Diode: prefix = 'D'; break;
-        case ComponentType.LED: prefix = 'D'; break;
         case ComponentType.Lamp: prefix = 'L'; break;
         case ComponentType.Junction: prefix = 'J'; break;
     }
@@ -279,11 +278,6 @@ const App: React.FC = () => {
     else if (type === ComponentType.Inductor) { newComp.props.inductance = 100e-3; }
     else if (type === ComponentType.ACSource) { newComp.props.amplitude = 10; newComp.props.frequency = 60; }
     else if (type === ComponentType.Diode) { newComp.props.diodeType = 'rectifier'; }
-    else if (type === ComponentType.LED) { 
-        newComp.props.color = '#00e5ff'; 
-        newComp.props.voltageDrop = 2.0; 
-        newComp.props.maxCurrent = 0.02; 
-    }
     else if (type === ComponentType.Lamp) { newComp.props.color = '#ffffaa'; newComp.props.resistance = 100; }
 
     let nextWires = [...wires];
@@ -716,7 +710,6 @@ const App: React.FC = () => {
           [ComponentType.Battery]: 'DC Sources',
           [ComponentType.ACSource]: 'AC Sources',
           [ComponentType.Diode]: 'Diodes',
-          [ComponentType.LED]: 'LEDs',
           [ComponentType.Switch]: 'Switches',
           [ComponentType.Lamp]: 'Lamps'
       };
@@ -758,8 +751,8 @@ const App: React.FC = () => {
               } else if (c.type === ComponentType.ACSource) {
                   props = `${formatUnit(c.props.amplitude || 0, 'V')} @ ${formatUnit(c.props.frequency || 0, 'Hz')}`;
                   formula = 'V(t) = A sin(wt)';
-              } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
-                  props = c.type === ComponentType.LED ? `Color: ${c.props.color}` : (c.props.diodeType || 'Rectifier');
+              } else if (c.type === ComponentType.Diode) {
+                  props = c.props.diodeType || 'Rectifier';
                   formula = 'Shockley Eq.';
               }
 

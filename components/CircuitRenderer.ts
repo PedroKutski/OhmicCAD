@@ -134,7 +134,6 @@ export const drawComponent = (
         break;
 
       case ComponentType.Diode:
-      case ComponentType.LED:
         // Terminals
         ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-15, 0); ctx.moveTo(40, 0); ctx.lineTo(15, 0); ctx.stroke();
         
@@ -157,61 +156,10 @@ export const drawComponent = (
             ctx.moveTo(15, -15); ctx.lineTo(20, -15); ctx.lineTo(20, -10); // S wing
             ctx.moveTo(15, 15); ctx.lineTo(10, 15); ctx.lineTo(10, 10);   // S wing
         } else {
-            // Rectifier / LED
+            // Rectifier
             ctx.moveTo(15, -15); ctx.lineTo(15, 15);
         }
         ctx.stroke();
-
-        // LED Arrows
-        if (c.type === ComponentType.LED) {
-            const color = c.props.color || '#00e5ff'; // Default light blue
-            ctx.strokeStyle = color;
-            
-            // Calculate intensity based on current
-            const current = isSimulating ? Math.max(0, c.simData.current) : 0;
-            const maxCurrent = c.props.maxCurrent || 0.02; 
-            const threshold = 1e-4; // 0.1mA to start visible glow
-            
-            let intensity = 0;
-            if (current > threshold) {
-                 intensity = Math.min(1, (current - threshold) / (maxCurrent - threshold));
-            }
-
-            // Fill the triangle for LED
-            ctx.beginPath();
-            ctx.moveTo(-15, -15);
-            ctx.lineTo(-15, 15);
-            ctx.lineTo(15, 0);
-            ctx.closePath();
-            
-            if (intensity > 0) {
-                ctx.fillStyle = color;
-                // Use globalAlpha to simulate dimming
-                ctx.globalAlpha = 0.4 + (0.6 * intensity);
-                ctx.fill();
-                ctx.globalAlpha = 1.0;
-                
-                ctx.shadowColor = color;
-                ctx.shadowBlur = 5 + (25 * intensity);
-            } else {
-                ctx.fillStyle = theme.background === '#ffffff' ? '#ddd' : '#222'; // Dark fill when off
-                ctx.fill();
-                ctx.shadowBlur = 0;
-            }
-            
-            ctx.beginPath();
-            ctx.moveTo(5, -20); ctx.lineTo(15, -30);
-            ctx.moveTo(15, -30); ctx.lineTo(10, -30);
-            ctx.moveTo(15, -30); ctx.lineTo(15, -25);
-            
-            ctx.moveTo(10, -15); ctx.lineTo(20, -25);
-            ctx.moveTo(20, -25); ctx.lineTo(15, -25);
-            ctx.moveTo(20, -25); ctx.lineTo(20, -20);
-            ctx.stroke();
-            
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = isSelected ? theme.selected : theme.componentStroke;
-        }
         break;
 
       case ComponentType.Lamp:
