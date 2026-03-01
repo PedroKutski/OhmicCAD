@@ -3,7 +3,7 @@ import { CIRCUIT_LIBRARY, CircuitCategory, CircuitItem } from '../data/circuitLi
 
 interface CircuitLibraryModalProps {
     onClose: () => void;
-    onLoadCircuit: (id: string, data?: any) => void;
+    onLoadCircuit: (id: string, data?: any, usageHint?: string) => void;
 }
 
 export const CircuitLibraryModal: React.FC<CircuitLibraryModalProps> = ({ onClose, onLoadCircuit }) => {
@@ -68,7 +68,7 @@ export const CircuitLibraryModal: React.FC<CircuitLibraryModalProps> = ({ onClos
                     key={circuit.id}
                     className="py-1 px-2 cursor-pointer hover:bg-orange-500/20 hover:text-orange-400 text-zinc-400 text-xs transition-colors"
                     style={{ paddingLeft: `${depth * 12 + 16}px` }}
-                    onClick={() => onLoadCircuit(circuit.id, circuit.data)}
+                    onClick={() => onLoadCircuit(circuit.id, circuit.data, circuit.usageHint)}
                 >
                     {circuit.name}
                 </div>
