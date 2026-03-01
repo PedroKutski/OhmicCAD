@@ -989,11 +989,12 @@ const App: React.FC = () => {
       }
   };
 
-  const handleLoadCircuit = (id: string, data?: any) => {
+  const handleLoadCircuit = (id: string, data?: any, usageHint?: string) => {
       if (data) {
           const circuit = data(); // Assuming data is a generator function
           updateStateWithHistory(circuit.components, circuit.wires);
-          setStatusMsg(`Loaded example: ${id}`);
+          const hint = usageHint ? ` Dica: ${usageHint}` : '';
+          setStatusMsg(`Loaded example: ${id}.${hint}`);
           setShowLibrary(false);
           resetSimulation();
       } else {
