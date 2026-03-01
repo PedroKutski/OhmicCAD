@@ -13,17 +13,18 @@ const linearizeLed = (vd: number, c: ComponentModel) => {
     const V_fwd = Math.max(0.8, c.props.voltageDrop || 2.0);
     const ratedCurrent = Math.max(1e-6, c.props.currentRating || 0.02);
     const n = 2.0;
-    const Is = 2e-12;
+    // Calibrate Is so the Shockley model reaches the rated current near V_fwd.
+    const Is = ratedCurrent / (Math.exp(V_fwd / (n * LED_VT)) - 1);
     const exponent = Math.min(40, (vd - V_fwd) / (n * LED_VT));
     const expTerm = Math.exp(exponent);
     const I_shockley = Is * (expTerm - 1);
     const G_shockley = (Is / (n * LED_VT)) * expTerm;
-    // Small series resistance to avoid unrealistically steep currents and improve convergence.
-    const R_series = Math.max(0.5, V_fwd / (ratedCurrent * 20));
-    const G_series = 1 / R_series;
-    const G_total = Math.max(1e-12, (G_shockley * G_series) / (G_shockley + G_series));
-    const I_total = I_shockley + vd / R_series;
-    const I_eq = I_total - G_total * vd;
+
+    // Bound dynamic conductance to keep Newton steps stable and avoid kV artifacts.
+    const G_min = 1e-10;
+    const G_max = ratedCurrent / Math.max(0.2, V_fwd * 0.1);
+    const G_total = Math.min(G_max, Math.max(G_min, G_shockley));
+    const I_eq = I_shockley - G_total * vd;
 
     return { G: G_total, I_eq };
 };
