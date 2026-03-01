@@ -69,11 +69,21 @@ export const drawComponent = (
       case ComponentType.ACSource:
         ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-15, 0); ctx.moveTo(40, 0); ctx.lineTo(15, 0); ctx.stroke();
         ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.stroke();
-        // Sine wave
+        // Sine wave (one clean period centered in the source symbol)
+        const waveHalfWidth = 9;
+        const waveAmplitude = 5;
+        const waveSamples = 40;
         ctx.beginPath();
-        ctx.moveTo(-8, 0);
-        ctx.bezierCurveTo(-4, -8, 0, 8, 4, 0);
-        ctx.bezierCurveTo(6, -4, 8, 0, 8, 0); // Simplified
+        for (let i = 0; i <= waveSamples; i++) {
+            const t = i / waveSamples;
+            const x = -waveHalfWidth + (2 * waveHalfWidth * t);
+            const y = -Math.sin(t * Math.PI * 2) * waveAmplitude;
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
         ctx.stroke();
         break;
 
