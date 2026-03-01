@@ -632,6 +632,128 @@ const App: React.FC = () => {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
+
+      const ensurePageSpace = (currentY: number, neededHeight: number, topMargin = 20) => {
+          if (currentY + neededHeight <= pageHeight - 15) {
+              return currentY;
+          }
+          doc.addPage();
+          return topMargin;
+      };
+
+      const getDetailedCalculationNotebook = (component: ComponentModel) => {
+          const name = component.props.name || component.id.substring(0, 6);
+          const V = component.simData.voltage || 0;
+          const I = component.simData.current || 0;
+          const P = component.simData.power || 0;
+
+          const lines: string[] = [
+              `Componente: ${name} (${component.type})`,
+              `Dados da simulação: V = ${V.toExponential(6)} V, I = ${I.toExponential(6)} A, P = ${P.toExponential(6)} W`
+          ];
+
+          if (component.type === ComponentType.Resistor) {
+              const R = component.props.resistance || 0;
+              const vFromOhm = I * R;
+              const iFromOhm = R !== 0 ? V / R : 0;
+              const pFromVI = V * I;
+              const pFromI2R = I * I * R;
+              const pFromV2R = R !== 0 ? (V * V) / R : 0;
+              lines.push(
+                  `1) Lei de Ohm (tensão): V = I × R`,
+                  `   Substituindo: V = (${I.toExponential(6)}) × (${R.toExponential(6)})`,
+                  `   Resultado: V = ${vFromOhm.toExponential(6)} V`,
+                  `2) Lei de Ohm (corrente): I = V / R`,
+                  `   Substituindo: I = (${V.toExponential(6)}) / (${R.toExponential(6)})`,
+                  `   Resultado: I = ${iFromOhm.toExponential(6)} A`,
+                  `3) Potência pela forma básica: P = V × I`,
+                  `   Substituindo: P = (${V.toExponential(6)}) × (${I.toExponential(6)})`,
+                  `   Resultado: P = ${pFromVI.toExponential(6)} W`,
+                  `4) Potência alternativa: P = I² × R`,
+                  `   Substituindo: P = (${I.toExponential(6)})² × (${R.toExponential(6)})`,
+                  `   Resultado: P = ${pFromI2R.toExponential(6)} W`,
+                  `5) Potência alternativa: P = V² / R`,
+                  `   Substituindo: P = (${V.toExponential(6)})² / (${R.toExponential(6)})`,
+                  `   Resultado: P = ${pFromV2R.toExponential(6)} W`
+              );
+          } else if (component.type === ComponentType.Capacitor || component.type === ComponentType.PolarizedCapacitor) {
+              const C = component.props.capacitance || 0;
+              const dvdt = C !== 0 ? I / C : 0;
+              const energy = 0.5 * C * V * V;
+              const charge = C * V;
+              lines.push(
+                  `1) Corrente no capacitor: I = C × dV/dt`,
+                  `   Reorganizando: dV/dt = I / C`,
+                  `   Substituindo: dV/dt = (${I.toExponential(6)}) / (${C.toExponential(6)})`,
+                  `   Resultado: dV/dt = ${dvdt.toExponential(6)} V/s`,
+                  `2) Carga armazenada: Q = C × V`,
+                  `   Substituindo: Q = (${C.toExponential(6)}) × (${V.toExponential(6)})`,
+                  `   Resultado: Q = ${charge.toExponential(6)} C`,
+                  `3) Energia armazenada: E = 0.5 × C × V²`,
+                  `   Substituindo: E = 0.5 × (${C.toExponential(6)}) × (${V.toExponential(6)})²`,
+                  `   Resultado: E = ${energy.toExponential(6)} J`
+              );
+          } else if (component.type === ComponentType.Inductor) {
+              const L = component.props.inductance || 0;
+              const didt = L !== 0 ? V / L : 0;
+              const energy = 0.5 * L * I * I;
+              lines.push(
+                  `1) Tensão no indutor: V = L × dI/dt`,
+                  `   Reorganizando: dI/dt = V / L`,
+                  `   Substituindo: dI/dt = (${V.toExponential(6)}) / (${L.toExponential(6)})`,
+                  `   Resultado: dI/dt = ${didt.toExponential(6)} A/s`,
+                  `2) Energia armazenada: E = 0.5 × L × I²`,
+                  `   Substituindo: E = 0.5 × (${L.toExponential(6)}) × (${I.toExponential(6)})²`,
+                  `   Resultado: E = ${energy.toExponential(6)} J`,
+                  `3) Verificação de potência instantânea: P = V × I = (${V.toExponential(6)}) × (${I.toExponential(6)}) = ${(V * I).toExponential(6)} W`
+              );
+          } else if (component.type === ComponentType.Battery) {
+              const sourceV = component.props.voltage || 0;
+              lines.push(
+                  `1) Fonte DC ideal: Vfonte = constante`,
+                  `   Valor configurado: Vfonte = ${sourceV.toExponential(6)} V`,
+                  `2) Potência entregue/absorvida: P = V × I`,
+                  `   Substituindo: P = (${V.toExponential(6)}) × (${I.toExponential(6)})`,
+                  `   Resultado: P = ${(V * I).toExponential(6)} W`
+              );
+          } else if (component.type === ComponentType.ACSource) {
+              const amplitude = component.props.amplitude || 0;
+              const frequency = component.props.frequency || 0;
+              const omega = 2 * Math.PI * frequency;
+              const vrms = amplitude / Math.sqrt(2);
+              lines.push(
+                  `1) Fonte senoidal: v(t) = A × sen(ωt)`,
+                  `   A = ${amplitude.toExponential(6)} V, f = ${frequency.toExponential(6)} Hz`,
+                  `2) Frequência angular: ω = 2πf`,
+                  `   Substituindo: ω = 2π × (${frequency.toExponential(6)})`,
+                  `   Resultado: ω = ${omega.toExponential(6)} rad/s`,
+                  `3) Tensão eficaz: Vrms = A/√2`,
+                  `   Substituindo: Vrms = (${amplitude.toExponential(6)})/√2`,
+                  `   Resultado: Vrms = ${vrms.toExponential(6)} V`,
+                  `4) Potência instantânea no passo atual: P = V × I = (${V.toExponential(6)}) × (${I.toExponential(6)}) = ${(V * I).toExponential(6)} W`
+              );
+          } else if (component.type === ComponentType.Diode) {
+              const vt = 0.02585;
+              const is = 1e-12;
+              const expArg = V / vt;
+              const approxI = is * (Math.exp(Math.max(Math.min(expArg, 40), -40)) - 1);
+              lines.push(
+                  `1) Modelo de Shockley: I = Is × (e^(Vd/Vt) - 1)`,
+                  `   Assumindo Is = ${is.toExponential(6)} A e Vt = ${vt.toExponential(6)} V`,
+                  `2) Substituindo: I = ${is.toExponential(6)} × (e^(${V.toExponential(6)}/${vt.toExponential(6)}) - 1)`,
+                  `   Resultado aproximado: I = ${approxI.toExponential(6)} A`,
+                  `3) Potência instantânea: P = V × I = (${V.toExponential(6)}) × (${I.toExponential(6)}) = ${(V * I).toExponential(6)} W`
+              );
+          } else {
+              lines.push(
+                  `1) Relação geral de potência: P = V × I`,
+                  `   Substituindo: P = (${V.toExponential(6)}) × (${I.toExponential(6)})`,
+                  `   Resultado: P = ${(V * I).toExponential(6)} W`
+              );
+          }
+
+          return lines;
+      };
       
       // 1. Title
       doc.setFontSize(22);
@@ -789,6 +911,45 @@ const App: React.FC = () => {
           });
 
           finalY = (doc as any).lastAutoTable.finalY + 15;
+      });
+
+      // 5. Caderno de cálculos detalhado (passo a passo)
+      doc.addPage();
+      finalY = 20;
+      doc.setFontSize(16);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Caderno de Cálculos (detalhado)', 14, finalY);
+      finalY += 8;
+
+      doc.setFontSize(10);
+      doc.setTextColor(80, 80, 80);
+      const intro = 'Nesta seção cada componente apresenta substituição numérica e resultado intermediário, em formato conta a conta.';
+      const introLines = doc.splitTextToSize(intro, pageWidth - 28);
+      doc.text(introLines, 14, finalY);
+      finalY += introLines.length * 5 + 6;
+
+      const reportableComponents = components.filter(c => c.type !== ComponentType.Junction);
+      reportableComponents.forEach((component, index) => {
+          const notebookLines = getDetailedCalculationNotebook(component);
+
+          const estimatedHeight = 12 + notebookLines.length * 5;
+          finalY = ensurePageSpace(finalY, estimatedHeight, 20);
+
+          doc.setFontSize(12);
+          doc.setTextColor(20, 20, 20);
+          doc.text(`${index + 1}. ${component.props.name || component.id.substring(0, 6)}`, 14, finalY);
+          finalY += 6;
+
+          doc.setFontSize(9);
+          doc.setTextColor(0, 0, 0);
+          notebookLines.forEach((line) => {
+              const wrapped = doc.splitTextToSize(line, pageWidth - 28);
+              finalY = ensurePageSpace(finalY, wrapped.length * 5 + 1, 20);
+              doc.text(wrapped, 14, finalY);
+              finalY += wrapped.length * 5;
+          });
+
+          finalY += 4;
       });
       
       doc.save(`ohmic_report_${Date.now()}.pdf`);
