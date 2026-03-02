@@ -410,23 +410,51 @@ export const drawWire = (
         
         const flowPath: { x: number; y: number }[] = [];
         if (shouldSmoothWire) {
+            const cornerRadius = 8;
             const start = w.path[0];
             flowPath.push({ x: start.x, y: start.y });
 
             for (let i = 1; i < w.path.length - 1; i++) {
-                const p0 = w.path[i - 1];
-                const p1 = w.path[i];
-                const p2 = w.path[i + 1];
-                const curveStart = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
-                const curveEnd = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-                const subdivisions = 8;
+                const prev = w.path[i - 1];
+                const current = w.path[i];
+                const next = w.path[i + 1];
 
+                const inDx = current.x - prev.x;
+                const inDy = current.y - prev.y;
+                const outDx = next.x - current.x;
+                const outDy = next.y - current.y;
+                const inLen = Math.hypot(inDx, inDy);
+                const outLen = Math.hypot(outDx, outDy);
+
+                if (inLen < 1e-6 || outLen < 1e-6) {
+                    flowPath.push({ x: current.x, y: current.y });
+                    continue;
+                }
+
+                const isCorner = (inDx !== 0 && outDy !== 0) || (inDy !== 0 && outDx !== 0);
+                if (!isCorner) {
+                    flowPath.push({ x: current.x, y: current.y });
+                    continue;
+                }
+
+                const radius = Math.min(cornerRadius, inLen / 2, outLen / 2);
+                const curveStart = {
+                    x: current.x - (inDx / inLen) * radius,
+                    y: current.y - (inDy / inLen) * radius,
+                };
+                const curveEnd = {
+                    x: current.x + (outDx / outLen) * radius,
+                    y: current.y + (outDy / outLen) * radius,
+                };
+
+                flowPath.push(curveStart);
+                const subdivisions = 8;
                 for (let s = 1; s <= subdivisions; s++) {
                     const t = s / subdivisions;
                     const oneMinusT = 1 - t;
                     flowPath.push({
-                        x: (oneMinusT * oneMinusT * curveStart.x) + (2 * oneMinusT * t * p1.x) + (t * t * curveEnd.x),
-                        y: (oneMinusT * oneMinusT * curveStart.y) + (2 * oneMinusT * t * p1.y) + (t * t * curveEnd.y),
+                        x: (oneMinusT * oneMinusT * curveStart.x) + (2 * oneMinusT * t * current.x) + (t * t * curveEnd.x),
+                        y: (oneMinusT * oneMinusT * curveStart.y) + (2 * oneMinusT * t * current.y) + (t * t * curveEnd.y),
                     });
                 }
             }
