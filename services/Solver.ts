@@ -1,437 +1,357 @@
-
 import { ComponentModel, WireModel, ComponentType } from '../types';
+import { SparseMatrix } from '../engine/core/matrixSparse';
 
-const G_MIN = 1e-10; // Stronger pull-down (10G Ohm) to stabilize floating nodes
-const R_CLOSED_SWITCH = 0.001; 
-const R_OPEN_SWITCH = 1e13; // 10T Ohm
-const R_CAPACITOR_DC = 1e13; 
-const MAX_ITERATIONS = 50; 
+const G_MIN = 1e-10;
+const R_CLOSED_SWITCH = 0.001;
+const R_OPEN_SWITCH = 1e13;
+const MAX_ITERATIONS = 50;
 const NEWTON_TOLERANCE = 1e-9;
 
 const LED_VT = 0.02585;
 
 const linearizeLed = (vd: number, c: ComponentModel) => {
-    const V_fwdNominal = Math.max(0.8, c.props.voltageDrop || 2.0);
-    const ratedCurrent = Math.max(1e-9, c.props.currentRating || 0.02);
-    const n = 2.0;
-    const R_series = Math.max(0.5, V_fwdNominal / Math.max(1e-9, ratedCurrent * 40));
-    const thermal = n * LED_VT;
-    const junctionNominal = Math.max(0.1, V_fwdNominal - ratedCurrent * R_series);
-    const denom = Math.exp(Math.min(80, junctionNominal / thermal)) - 1;
-    const Is = Math.max(1e-30, ratedCurrent / Math.max(1e-12, denom));
+  const V_fwdNominal = Math.max(0.8, c.props.voltageDrop || 2.0);
+  const ratedCurrent = Math.max(1e-9, c.props.currentRating || 0.02);
+  const n = 2.0;
+  const R_series = Math.max(0.5, V_fwdNominal / Math.max(1e-9, ratedCurrent * 40));
+  const thermal = n * LED_VT;
+  const junctionNominal = Math.max(0.1, V_fwdNominal - ratedCurrent * R_series);
+  const denom = Math.exp(Math.min(80, junctionNominal / thermal)) - 1;
+  const Is = Math.max(1e-30, ratedCurrent / Math.max(1e-12, denom));
 
-    // Solve I = Is * (exp((V - I*Rs)/(nVt)) - 1) with Newton iterations.
-    let current = vd > 0 ? Math.max(0, (vd - V_fwdNominal) / Math.max(0.5, R_series)) : -Is;
-    for (let k = 0; k < 12; k++) {
-        const junctionVoltage = vd - current * R_series;
-        const exponent = Math.min(80, Math.max(-40, junctionVoltage / thermal));
-        const expTerm = Math.exp(exponent);
-        const shockleyCurrent = Is * (expTerm - 1);
-        const residual = current - shockleyCurrent;
-        const derivative = 1 + (Is * expTerm * R_series) / thermal;
-        const step = residual / Math.max(1e-12, derivative);
-        current -= step;
-        if (Math.abs(step) < 1e-12) break;
-    }
-
+  let current = vd > 0 ? Math.max(0, (vd - V_fwdNominal) / Math.max(0.5, R_series)) : -Is;
+  for (let k = 0; k < 12; k++) {
     const junctionVoltage = vd - current * R_series;
     const exponent = Math.min(80, Math.max(-40, junctionVoltage / thermal));
     const expTerm = Math.exp(exponent);
-    const gd = (Is * expTerm) / thermal;
+    const shockleyCurrent = Is * (expTerm - 1);
+    const residual = current - shockleyCurrent;
+    const derivative = 1 + (Is * expTerm * R_series) / thermal;
+    const step = residual / Math.max(1e-12, derivative);
+    current -= step;
+    if (Math.abs(step) < 1e-12) break;
+  }
 
-    // Small-signal conductance of diode+series resistor.
-    const G = Math.max(1e-10, gd / (1 + gd * R_series));
-    const I_eq = current - G * vd;
+  const junctionVoltage = vd - current * R_series;
+  const exponent = Math.min(80, Math.max(-40, junctionVoltage / thermal));
+  const expTerm = Math.exp(exponent);
+  const gd = (Is * expTerm) / thermal;
 
-    return { G, I_eq, current };
+  const G = Math.max(1e-10, gd / (1 + gd * R_series));
+  const I_eq = current - G * vd;
+
+  return { G, I_eq, current };
 };
 
 export class CircuitSolver {
-  static solve(components: ComponentModel[], wires: WireModel[], dt: number = 0.1, simTime: number = 0) {
-    const voltageSources: ComponentModel[] = components.filter(c => c.type === ComponentType.Battery || c.type === ComponentType.ACSource);
-    // Capacitors and Inductors are now modeled with companion models (Resistor + Current Source), so they don't add rows to the matrix like voltage sources do.
-    
-    const allPorts = new Set<string>();
-    components.forEach(c => { 
-        allPorts.add(`${c.id}_0`); 
-        if (c.type !== ComponentType.Junction) allPorts.add(`${c.id}_1`); 
+  private static buildPortToNetMap(components: ComponentModel[], wires: WireModel[]): Map<string, number> {
+    const allPorts: string[] = [];
+    components.forEach(c => {
+      allPorts.push(`${c.id}_0`);
+      if (c.type !== ComponentType.Junction) allPorts.push(`${c.id}_1`);
     });
-    const pList = Array.from(allPorts);
-    const pMap = new Map<string, number>();
-    pList.forEach((p, i) => pMap.set(p, i));
-    
-    // Matrix size: nodes + voltage sources
-    const size = pList.length + voltageSources.length;
+
+    const parent = new Map<string, string>();
+    const rank = new Map<string, number>();
+
+    const makeSet = (x: string) => {
+      if (parent.has(x)) return;
+      parent.set(x, x);
+      rank.set(x, 0);
+    };
+
+    const find = (x: string): string => {
+      const p = parent.get(x);
+      if (!p) {
+        makeSet(x);
+        return x;
+      }
+      if (p === x) return x;
+      const root = find(p);
+      parent.set(x, root);
+      return root;
+    };
+
+    const union = (a: string, b: string) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra === rb) return;
+      const rankA = rank.get(ra) || 0;
+      const rankB = rank.get(rb) || 0;
+      if (rankA < rankB) {
+        parent.set(ra, rb);
+      } else if (rankA > rankB) {
+        parent.set(rb, ra);
+      } else {
+        parent.set(rb, ra);
+        rank.set(ra, rankA + 1);
+      }
+    };
+
+    allPorts.forEach(makeSet);
+    wires.forEach(w => {
+      const pA = `${w.compAId}_${w.portAIndex}`;
+      const pB = `${w.compBId}_${w.portBIndex}`;
+      if (parent.has(pA) && parent.has(pB)) union(pA, pB);
+    });
+
+    const rootToNet = new Map<string, number>();
+    const portToNet = new Map<string, number>();
+    allPorts.forEach(port => {
+      const root = find(port);
+      let netIdx = rootToNet.get(root);
+      if (netIdx === undefined) {
+        netIdx = rootToNet.size;
+        rootToNet.set(root, netIdx);
+      }
+      portToNet.set(port, netIdx);
+    });
+
+    return portToNet;
+  }
+
+  static solve(components: ComponentModel[], wires: WireModel[], dt: number = 0.1, simTime: number = 0): { ok: boolean; error?: string } {
+    const voltageSources: ComponentModel[] = components.filter(c => c.type === ComponentType.Battery || c.type === ComponentType.ACSource);
+    const portToNet = CircuitSolver.buildPortToNetMap(components, wires);
+    const netCount = new Set(portToNet.values()).size;
+
+    const size = netCount + voltageSources.length;
     let sol = new Array(size).fill(0);
 
-    // Iterative Newton-Raphson Solver (though linear components only need 1 iteration)
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-        const A = Array(size).fill(0).map(() => Array(size).fill(0));
-        const B = Array(size).fill(0);
-        
-        const stampR = (u: number, v: number, r: number) => {
-            const g = 1/Math.max(1e-14, r);
-            A[u][u] += g; A[v][v] += g;
-            A[u][v] -= g; A[v][u] -= g;
-        };
+      const A = new SparseMatrix(size);
+      const B = Array(size).fill(0);
 
-        const stampG = (u: number, v: number, g: number) => {
-            A[u][u] += g; A[v][v] += g;
-            A[u][v] -= g; A[v][u] -= g;
-        };
+      const stampR = (u: number, v: number, r: number) => {
+        if (u === v) return;
+        const g = 1 / Math.max(1e-14, r);
+        A.add(u, u, g); A.add(v, v, g);
+        A.add(u, v, -g); A.add(v, u, -g);
+      };
 
-        const stampCurrentSource = (u: number, v: number, i: number) => {
-            // Current entering u, leaving v
-            B[u] += i;
-            B[v] -= i;
-        };
+      const stampG = (u: number, v: number, g: number) => {
+        if (u === v) return;
+        A.add(u, u, g); A.add(v, v, g);
+        A.add(u, v, -g); A.add(v, u, -g);
+      };
 
-        const stampVoltageSource = (u: number, v: number, voltage: number, idx: number, Rs: number = 0) => {
-            A[idx][u] = 1; A[idx][v] = -1; A[idx][idx] = -Rs; B[idx] = voltage;
-            A[u][idx] = 1; A[v][idx] = -1;
-        };
-        
-        wires.forEach(w => {
-            const u = pMap.get(`${w.compAId}_${w.portAIndex}`);
-            const v = pMap.get(`${w.compBId}_${w.portBIndex}`);
-            if (u !== undefined && v !== undefined) {
-                const R_Ideal = 1e-3; // 1 mOhm wire resistance
-                stampR(u, v, R_Ideal);
-                w.simData.resistance = R_Ideal;
-            }
-        });
-        
-        components.forEach(c => {
-            if (c.type === ComponentType.Junction) return;
-            const u = pMap.get(`${c.id}_0`)!; 
-            const v = pMap.get(`${c.id}_1`)!; 
-            
-            if (c.type === ComponentType.Resistor) {
-                stampR(u, v, Math.max(1e-6, c.props.resistance || 1000));
-            } else if (c.type === ComponentType.Switch || c.type === ComponentType.PushButton) {
-                stampR(u, v, c.props.closed ? R_CLOSED_SWITCH : R_OPEN_SWITCH);
-            } else if (c.type === ComponentType.Capacitor || c.type === ComponentType.PolarizedCapacitor) {
-                // Companion Model (Backward Euler)
-                // i(n) = C * (v(n) - v(n-1)) / dt
-                // i(n) = (C/dt)*v(n) - (C/dt)*v(n-1)
-                // Modeled as Conductance G = C/dt in parallel with Current Source I = -(C/dt)*v(n-1)
-                // Current source direction: I flows from node 1 to node 0 (if v defined as v1-v0)
-                // Actually simpler:
-                // I_branch = G*V_branch + I_eq
-                // I_eq = -G * V_prev
-                // V_prev is storedVoltage from previous step.
-                
-                const unit = c.props.capacitanceUnit || 'µF';
-                let mult = 1e-6;
-                if (unit === 'mF') mult = 1e-3;
-                if (unit === 'nF') mult = 1e-9;
-                if (unit === 'pF') mult = 1e-12;
-                const C = (c.props.capacitance || 10) * mult;
-                const G = C / dt;
-                const vPrev = c.simData.storedVoltage || 0;
-                const I_eq = -G * vPrev; // Current source value
-                
-                stampG(u, v, G);
-                
-                // Add Leakage Resistance (e.g., 100M Ohm)
-                // This ensures that if the capacitor is disconnected, it slowly discharges or stabilizes to 0 if floating.
-                const G_leak = 1e-12; // 1 TOhm
-                stampG(u, v, G_leak);
-
-                // Current source I_eq is in parallel with G.
-                // Total current leaving u = G*(Vu - Vv) + I_eq
-                // So in KCL at u: ... + G(Vu - Vv) + I_eq = 0
-                // G terms are handled by stampG.
-                // I_eq term: move to RHS -> B[u] -= I_eq
-                // KCL at v: ... + G(Vv - Vu) - I_eq = 0 -> B[v] += I_eq
-                
-                B[u] -= I_eq;
-                B[v] += I_eq;
-
-            } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
-                // Diode Model (Piecewise Linear with Iteration)
-                
-                const u = pMap.get(`${c.id}_0`)!; 
-                const v = pMap.get(`${c.id}_1`)!; 
-                
-                let V_fwd = c.type === ComponentType.LED ? Math.max(0.8, c.props.voltageDrop || 2.0) : 0.7;
-                if (c.props.diodeType === 'schottky') V_fwd = 0.3;
-                
-                const V_zener = c.props.zenerVoltage || 5.6;
-                
-                // Dynamic Resistance (Slope)
-                let R_on = 0.1;
-
-                // Off Conductance
-                const G_off = 1e-10; 
-
-                // Get voltage from previous iteration
-                let Vd = 0;
-                if (iter > 0) Vd = sol[u] - sol[v];
-                
-                if (c.type === ComponentType.LED) {
-                    if (Vd > 0) {
-                        const { G, I_eq } = linearizeLed(Vd, c);
-                        stampG(u, v, G);
-                        B[u] -= I_eq; B[v] += I_eq;
-                    } else {
-                        stampG(u, v, G_off);
-                    }
-                } else if (Vd > V_fwd) {
-                    // Forward Conducting: I = (Vd - V_fwd) / R_on
-                    // Linearized: I = G*Vd + I_eq
-                    // G = 1/R_on
-                    // I_eq = -V_fwd/R_on
-                    const G = 1/R_on;
-                    const I_eq = -V_fwd/R_on;
-                    stampG(u, v, G);
-                    B[u] -= I_eq; B[v] += I_eq;
-                } else if (c.props.diodeType === 'zener' && Vd < -V_zener) {
-                    // Zener Breakdown
-                    const G = 1/R_on;
-                    const I_eq = V_zener/R_on;
-                    stampG(u, v, G);
-                    B[u] -= I_eq; B[v] += I_eq;
-                } else {
-                    // Blocking
-                    stampG(u, v, G_off);
-                }
-
-            } else if (c.type === ComponentType.Lamp) {
-                // Lamp modeled as resistor (constant for now, could be temp-dependent)
-                const R_lamp = 100; 
-                stampR(u, v, R_lamp);
-
-            } else if (c.type === ComponentType.Inductor) {
-                // Companion Model with Series Resistance (ESR)
-                const L = c.props.inductance || 100e-3;
-                const Rs = 0.1; // 100 mOhm ESR - more realistic and prevents kA currents
-                const safeDt = Math.max(1e-6, dt);
-                const G_eq = 1 / (Rs + L/safeDt);
-                const iPrev = c.simData.storedCurrent || 0; 
-                const I_eq = iPrev * (L/safeDt) * G_eq;
-                
-                stampG(u, v, G_eq);
-                
-                B[u] -= I_eq;
-                B[v] += I_eq;
-
-            } else if (c.type === ComponentType.Battery) {
-                const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
-                const idx = pList.length + vsIdx;
-                // Add 0.1 Ohm internal resistance to prevent infinite current
-                stampVoltageSource(v, u, c.props.voltage || 9, idx, 0.1);
-            } else if (c.type === ComponentType.ACSource) {
-                const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
-                const idx = pList.length + vsIdx;
-                const amp = c.props.amplitude || 20;
-                const freq = c.props.frequency || 60;
-                const val = amp * Math.sin(2 * Math.PI * freq * simTime);
-                // Add 0.1 Ohm internal resistance
-                stampVoltageSource(v, u, val, idx, 0.1);
-            }
-        });
-        
-        // Ground reference
-        for(let i=0; i<pList.length; i++) A[i][i] += G_MIN;
-        A[0].fill(0); A[0][0] = 1; B[0] = 0;
-        
-        const previousSol = sol;
-        sol = CircuitSolver.solveLinearMatrix(A, B);
-        if (sol.some(isNaN)) {
-            console.warn("Solver produced NaN, resetting simulation state.");
-            sol.fill(0);
-            return; // Abort this step
+      const stampVoltageSource = (u: number, v: number, voltage: number, idx: number, Rs: number = 0) => {
+        if (u !== v) {
+          A.add(idx, u, 1); A.add(idx, v, -1);
+          A.add(u, idx, 1); A.add(v, idx, -1);
         }
+        A.add(idx, idx, -Rs);
+        B[idx] = voltage;
+      };
 
-        const maxDelta = sol.reduce((m, v, i) => Math.max(m, Math.abs(v - previousSol[i])), 0);
-        if (maxDelta < NEWTON_TOLERANCE) break;
-    }
-    
-    // Update State
-    components.forEach(c => {
+      components.forEach(c => {
         if (c.type === ComponentType.Junction) return;
-        const u = pMap.get(`${c.id}_0`)!;
-        const v = pMap.get(`${c.id}_1`)!;
-        
-        const newVoltage = sol[u] - sol[v]; // V_u - V_v
-        let newCurrent = 0; // Current from u to v
+        const u = portToNet.get(`${c.id}_0`)!;
+        const v = portToNet.get(`${c.id}_1`)!;
 
-        if (c.type === ComponentType.Battery || c.type === ComponentType.ACSource) {
-            const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
-            // Solver calculates current leaving positive terminal (v)
-            // So current from u to v is -I_source
-            newCurrent = -sol[pList.length + vsIdx]; 
+        if (c.type === ComponentType.Resistor) {
+          stampR(u, v, Math.max(1e-6, c.props.resistance || 1000));
+        } else if (c.type === ComponentType.Switch || c.type === ComponentType.PushButton) {
+          stampR(u, v, c.props.closed ? R_CLOSED_SWITCH : R_OPEN_SWITCH);
         } else if (c.type === ComponentType.Capacitor || c.type === ComponentType.PolarizedCapacitor) {
-             const unit = c.props.capacitanceUnit || 'µF';
-             let mult = 1e-6;
-             if (unit === 'mF') mult = 1e-3;
-             if (unit === 'nF') mult = 1e-9;
-             if (unit === 'pF') mult = 1e-12;
-             const C = (c.props.capacitance || 10) * mult;
-             const G = C / dt;
-             const vPrev = c.simData.storedVoltage || 0;
-             // I = G * (V - V_prev)
-             newCurrent = G * (newVoltage - vPrev);
-             
-             c.simData.storedVoltage = newVoltage; // Update state
-             c.simData.voltage = Math.abs(newVoltage);
-        } else if (c.type === ComponentType.Inductor) {
-             const L = c.props.inductance || 100e-3;
-             const Rs = 0.1;
-             const safeDt = Math.max(1e-6, dt);
-             const G_eq = 1 / (Rs + L/safeDt);
-             const iPrev = c.simData.storedCurrent || 0;
-             const I_eq = iPrev * (L/safeDt) * G_eq;
-             
-             newCurrent = G_eq * newVoltage + I_eq;
-             
-             c.simData.storedCurrent = newCurrent; // Update state
-             c.simData.voltage = Math.abs(newVoltage);
+          const unit = c.props.capacitanceUnit || 'µF';
+          let mult = 1e-6;
+          if (unit === 'mF') mult = 1e-3;
+          if (unit === 'nF') mult = 1e-9;
+          if (unit === 'pF') mult = 1e-12;
+          const C = (c.props.capacitance || 10) * mult;
+          const G = C / dt;
+          const vPrev = c.simData.storedVoltage || 0;
+          const I_eq = -G * vPrev;
+
+          stampG(u, v, G);
+          stampG(u, v, 1e-12);
+          B[u] -= I_eq;
+          B[v] += I_eq;
         } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
-             // Reverted to PWL for state update consistency
-             let V_fwd = c.type === ComponentType.LED ? Math.max(0.8, c.props.voltageDrop || 2.0) : 0.7;
-             if (c.props.diodeType === 'schottky') V_fwd = 0.3;
+          let V_fwd = c.type === ComponentType.LED ? Math.max(0.8, c.props.voltageDrop || 2.0) : 0.7;
+          if (c.props.diodeType === 'schottky') V_fwd = 0.3;
 
-             const V_zener = c.props.zenerVoltage || 5.6;
-             
-             let R_on = 0.1;
+          const V_zener = c.props.zenerVoltage || 5.6;
+          const R_on = 0.1;
+          const G_off = 1e-10;
+          const Vd = iter > 0 ? (sol[u] - sol[v]) : 0;
 
-             const G_off = 1e-10;
-
-             if (c.type === ComponentType.LED) {
-                 if (newVoltage > 0) {
-                    const { current } = linearizeLed(newVoltage, c);
-                    newCurrent = current;
-                 } else {
-                    newCurrent = newVoltage * G_off;
-                 }
-             } else if (newVoltage > V_fwd) {
-                 newCurrent = (newVoltage - V_fwd) / R_on;
-             } else if (c.props.diodeType === 'zener' && newVoltage < -V_zener) {
-                 newCurrent = (newVoltage + V_zener) / R_on;
-             } else {
-                 newCurrent = newVoltage * G_off;
-             }
-
-             // Non-linear equivalent resistance at the current operating point.
-             // This helps downstream calculations/reports apply Ohm's law consistently.
-             c.simData.resistance = Math.abs(newCurrent) > 1e-12
-                 ? Math.abs(newVoltage / newCurrent)
-                 : 1 / G_off;
-        } else if (c.type === ComponentType.Lamp) {
-             const R_lamp = 100;
-             newCurrent = newVoltage / R_lamp;
-        } else {
-            const r = c.type === ComponentType.Resistor ? (c.props.resistance || 1000) : 1e-9;
-            if (c.type === ComponentType.Switch || c.type === ComponentType.PushButton) {
-                 newCurrent = newVoltage / (c.props.closed ? R_CLOSED_SWITCH : R_OPEN_SWITCH);
+          if (c.type === ComponentType.LED) {
+            if (Vd > 0) {
+              const { G, I_eq } = linearizeLed(Vd, c);
+              stampG(u, v, G);
+              B[u] -= I_eq; B[v] += I_eq;
             } else {
-                 newCurrent = newVoltage / Math.max(r, 1e-9);
+              stampG(u, v, G_off);
             }
+          } else if (Vd > V_fwd) {
+            const G = 1 / R_on;
+            const I_eq = -V_fwd / R_on;
+            stampG(u, v, G);
+            B[u] -= I_eq; B[v] += I_eq;
+          } else if (c.props.diodeType === 'zener' && Vd < -V_zener) {
+            const G = 1 / R_on;
+            const I_eq = V_zener / R_on;
+            stampG(u, v, G);
+            B[u] -= I_eq; B[v] += I_eq;
+          } else {
+            stampG(u, v, G_off);
+          }
+        } else if (c.type === ComponentType.Lamp) {
+          stampR(u, v, 100);
+        } else if (c.type === ComponentType.Inductor) {
+          const L = c.props.inductance || 100e-3;
+          const Rs = 0.1;
+          const safeDt = Math.max(1e-6, dt);
+          const G_eq = 1 / (Rs + L / safeDt);
+          const iPrev = c.simData.storedCurrent || 0;
+          const I_eq = iPrev * (L / safeDt) * G_eq;
+
+          stampG(u, v, G_eq);
+          B[u] -= I_eq;
+          B[v] += I_eq;
+        } else if (c.type === ComponentType.Battery) {
+          const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
+          stampVoltageSource(v, u, c.props.voltage || 9, netCount + vsIdx, 0.1);
+        } else if (c.type === ComponentType.ACSource) {
+          const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
+          const amp = c.props.amplitude || 20;
+          const freq = c.props.frequency || 60;
+          const val = amp * Math.sin(2 * Math.PI * freq * simTime);
+          stampVoltageSource(v, u, val, netCount + vsIdx, 0.1);
+        }
+      });
+
+      for (let i = 0; i < netCount; i++) A.add(i, i, G_MIN);
+      for (let j = 0; j < size; j++) {
+        if (j !== 0) {
+          A.set(0, j, 0);
+          A.set(j, 0, 0);
+        }
+      }
+      A.set(0, 0, 1);
+      B[0] = 0;
+
+      const previousSol = sol;
+      try {
+        sol = A.solve(B);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown matrix solve error';
+        return { ok: false, error: `Falha na simulação: matriz singular ou mal-condicionada (${message}).` };
+      }
+
+      if (sol.some(Number.isNaN)) {
+        sol.fill(0);
+        return { ok: false, error: 'Falha na simulação: solução numérica inválida (NaN).' };
+      }
+
+      const maxDelta = sol.reduce((m, v, i) => Math.max(m, Math.abs(v - previousSol[i])), 0);
+      if (maxDelta < NEWTON_TOLERANCE) break;
+    }
+
+    components.forEach(c => {
+      if (c.type === ComponentType.Junction) return;
+      const u = portToNet.get(`${c.id}_0`)!;
+      const v = portToNet.get(`${c.id}_1`)!;
+
+      const newVoltage = sol[u] - sol[v];
+      let newCurrent = 0;
+
+      if (c.type === ComponentType.Battery || c.type === ComponentType.ACSource) {
+        const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
+        newCurrent = -sol[netCount + vsIdx];
+      } else if (c.type === ComponentType.Capacitor || c.type === ComponentType.PolarizedCapacitor) {
+        const unit = c.props.capacitanceUnit || 'µF';
+        let mult = 1e-6;
+        if (unit === 'mF') mult = 1e-3;
+        if (unit === 'nF') mult = 1e-9;
+        if (unit === 'pF') mult = 1e-12;
+        const C = (c.props.capacitance || 10) * mult;
+        const G = C / dt;
+        const vPrev = c.simData.storedVoltage || 0;
+        newCurrent = G * (newVoltage - vPrev);
+
+        c.simData.storedVoltage = newVoltage;
+        c.simData.voltage = Math.abs(newVoltage);
+      } else if (c.type === ComponentType.Inductor) {
+        const L = c.props.inductance || 100e-3;
+        const Rs = 0.1;
+        const safeDt = Math.max(1e-6, dt);
+        const G_eq = 1 / (Rs + L / safeDt);
+        const iPrev = c.simData.storedCurrent || 0;
+        const I_eq = iPrev * (L / safeDt) * G_eq;
+
+        newCurrent = G_eq * newVoltage + I_eq;
+        c.simData.storedCurrent = newCurrent;
+        c.simData.voltage = Math.abs(newVoltage);
+      } else if (c.type === ComponentType.Diode || c.type === ComponentType.LED) {
+        let V_fwd = c.type === ComponentType.LED ? Math.max(0.8, c.props.voltageDrop || 2.0) : 0.7;
+        if (c.props.diodeType === 'schottky') V_fwd = 0.3;
+
+        const V_zener = c.props.zenerVoltage || 5.6;
+        const R_on = 0.1;
+        const G_off = 1e-10;
+
+        if (c.type === ComponentType.LED) {
+          newCurrent = newVoltage > 0 ? linearizeLed(newVoltage, c).current : newVoltage * G_off;
+        } else if (newVoltage > V_fwd) {
+          newCurrent = (newVoltage - V_fwd) / R_on;
+        } else if (c.props.diodeType === 'zener' && newVoltage < -V_zener) {
+          newCurrent = (newVoltage + V_zener) / R_on;
+        } else {
+          newCurrent = newVoltage * G_off;
         }
 
-        // Apply Inductance / Smoothing to Current for display
-        const alpha = 0.5; // Less smoothing for faster response
-        c.simData.current = c.simData.current * (1 - alpha) + newCurrent * alpha;
-        
-        if (c.type !== ComponentType.Capacitor && c.type !== ComponentType.PolarizedCapacitor && c.type !== ComponentType.Inductor) {
-            c.simData.voltage = c.type === ComponentType.ACSource ? newVoltage : Math.abs(newVoltage);
-            if (c.simData.voltage < 1e-6) c.simData.voltage = 0; // Snap small voltages to 0
+        c.simData.resistance = Math.abs(newCurrent) > 1e-12 ? Math.abs(newVoltage / newCurrent) : 1 / G_off;
+      } else if (c.type === ComponentType.Lamp) {
+        newCurrent = newVoltage / 100;
+      } else {
+        const r = c.type === ComponentType.Resistor ? (c.props.resistance || 1000) : 1e-9;
+        if (c.type === ComponentType.Switch || c.type === ComponentType.PushButton) {
+          newCurrent = newVoltage / (c.props.closed ? R_CLOSED_SWITCH : R_OPEN_SWITCH);
+        } else {
+          newCurrent = newVoltage / Math.max(r, 1e-9);
         }
-        c.simData.power = c.simData.voltage * Math.abs(c.simData.current);
+      }
 
-        // RMS/Peak Calculation
-        const decay = 0.999; // Slow decay for peak
-        const rmsAlpha = 0.005; // Smoothing for RMS (Mean Square)
-        
-        c.simData.vPk = Math.max(Math.abs(c.simData.voltage), (c.simData.vPk || 0) * decay);
-        c.simData.iPk = Math.max(Math.abs(c.simData.current), (c.simData.iPk || 0) * decay);
-        
-        const vSq = c.simData.voltage * c.simData.voltage;
-        c.simData._vSqSum = (c.simData._vSqSum || 0) * (1 - rmsAlpha) + vSq * rmsAlpha;
-        c.simData.vRms = Math.sqrt(c.simData._vSqSum);
-        
-        const iSq = c.simData.current * c.simData.current;
-        c.simData._iSqSum = (c.simData._iSqSum || 0) * (1 - rmsAlpha) + iSq * rmsAlpha;
-        c.simData.iRms = Math.sqrt(c.simData._iSqSum);
+      const alpha = 0.5;
+      c.simData.current = c.simData.current * (1 - alpha) + newCurrent * alpha;
+
+      if (c.type !== ComponentType.Capacitor && c.type !== ComponentType.PolarizedCapacitor && c.type !== ComponentType.Inductor) {
+        c.simData.voltage = c.type === ComponentType.ACSource ? newVoltage : Math.abs(newVoltage);
+        if (c.simData.voltage < 1e-6) c.simData.voltage = 0;
+      }
+      c.simData.power = c.simData.voltage * Math.abs(c.simData.current);
+
+      const decay = 0.999;
+      const rmsAlpha = 0.005;
+
+      c.simData.vPk = Math.max(Math.abs(c.simData.voltage), (c.simData.vPk || 0) * decay);
+      c.simData.iPk = Math.max(Math.abs(c.simData.current), (c.simData.iPk || 0) * decay);
+
+      const vSq = c.simData.voltage * c.simData.voltage;
+      c.simData._vSqSum = (c.simData._vSqSum || 0) * (1 - rmsAlpha) + vSq * rmsAlpha;
+      c.simData.vRms = Math.sqrt(c.simData._vSqSum);
+
+      const iSq = c.simData.current * c.simData.current;
+      c.simData._iSqSum = (c.simData._iSqSum || 0) * (1 - rmsAlpha) + iSq * rmsAlpha;
+      c.simData.iRms = Math.sqrt(c.simData._iSqSum);
     });
 
     wires.forEach(w => {
-        const u = pMap.get(`${w.compAId}_${w.portAIndex}`);
-        const v = pMap.get(`${w.compBId}_${w.portBIndex}`);
-        if (u !== undefined && v !== undefined) {
-            const newVoltage = Math.abs(sol[u] - sol[v]);
-            const newCurrent = (sol[u] - sol[v]) / (w.simData.resistance || 1e-4);
-            
-            // Inductance for wires
-            const alpha = 0.2;
-            w.simData.current = w.simData.current * (1 - alpha) + newCurrent * alpha;
-            w.simData.voltage = newVoltage;
-            w.simData.power = Math.abs(w.simData.voltage * w.simData.current);
-        }
+      const u = portToNet.get(`${w.compAId}_${w.portAIndex}`);
+      const v = portToNet.get(`${w.compBId}_${w.portBIndex}`);
+      if (u !== undefined && v !== undefined) {
+        const newVoltage = Math.abs(sol[u] - sol[v]);
+        const alpha = 0.2;
+        w.simData.current = w.simData.current * (1 - alpha);
+        w.simData.voltage = newVoltage;
+        w.simData.power = Math.abs(w.simData.voltage * w.simData.current);
+        w.simData.resistance = 0;
+      }
     });
-  }
 
-  private static solveLinearMatrix(A: number[][], B: number[]): number[] {
-    const n = B.length;
-    // Deep copy A and B
-    const M = A.map(row => [...row]);
-    const x = [...B];
-    
-    // Gaussian elimination with partial pivoting
-    for (let i = 0; i < n; i++) {
-        // Find pivot
-        let maxEl = Math.abs(M[i][i]);
-        let maxRow = i;
-        for (let k = i + 1; k < n; k++) {
-            if (Math.abs(M[k][i]) > maxEl) {
-                maxEl = Math.abs(M[k][i]);
-                maxRow = k;
-            }
-        }
-
-        // Swap rows
-        if (maxRow !== i) {
-            [M[i], M[maxRow]] = [M[maxRow], M[i]];
-            [x[i], x[maxRow]] = [x[maxRow], x[i]];
-        }
-
-        // Check for singular matrix or near-zero pivot
-        if (Math.abs(M[i][i]) < 1e-20) {
-            // Skip this column or handle singularity
-            continue;
-        }
-
-        // Eliminate
-        for (let k = i + 1; k < n; k++) {
-            const factor = -M[k][i] / M[i][i];
-            // Optimization: M[k][i] becomes 0, so we can skip it or set it explicitly
-            M[k][i] = 0; 
-            for (let j = i + 1; j < n; j++) {
-                M[k][j] += factor * M[i][j];
-            }
-            x[k] += factor * x[i];
-        }
-    }
-
-    // Back substitution
-    const res = new Array(n).fill(0);
-    for (let i = n - 1; i >= 0; i--) {
-        if (Math.abs(M[i][i]) < 1e-20) {
-            res[i] = 0; // Free variable, set to 0
-        } else {
-            let sum = 0;
-            for (let j = i + 1; j < n; j++) {
-                sum += M[i][j] * res[j];
-            }
-            res[i] = (x[i] - sum) / M[i][i];
-        }
-        
-        // Clamp extremely small values to 0 to avoid -1.336e-12 noise
-        // if (Math.abs(res[i]) < 1e-15) res[i] = 0;
-    }
-    
-    return res;
+    return { ok: true };
   }
 }
