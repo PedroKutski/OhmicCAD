@@ -206,7 +206,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
     const now = Date.now();
     const dt = (now - lastFrameTimeRef.current) / 1000;
     lastFrameTimeRef.current = now;
-    if (isSimulating) visualTimeRef.current += dt * appSettings.visualFlowSpeed;
+    if (isSimulating && !isPaused) visualTimeRef.current += dt * appSettings.visualFlowSpeed;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
@@ -285,8 +285,10 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
             
             // Current
             lines.push(`I = ${formatUnit(target.simData.current, 'A')}`);
-            
-            if ('type' in target && (target as ComponentModel).type === ComponentType.Inductor) {
+
+            if (!('type' in target)) {
+                // For wires, display only current as requested.
+            } else if ((target as ComponentModel).type === ComponentType.Inductor) {
                  lines.push(`Vd = ${formatUnit(target.simData.voltage, 'V')}`);
                  if ((target as ComponentModel).props.inductance !== undefined) {
                      lines.push(`L = ${formatUnit((target as ComponentModel).props.inductance!, 'H')}`);
