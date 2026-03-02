@@ -338,14 +338,15 @@ export const drawWire = (
     isSelected: boolean, 
     isSimulating: boolean, 
     appSettings: AppSettings, 
-    visualTime: number
+    visualTime: number,
+    selectedSegmentIndex: number | null = null
 ) => {
     ctx.strokeStyle = isSelected ? theme.wireSelected : theme.wire;
     ctx.lineWidth = isSelected ? 3 : 2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    const shouldSmoothWire = !!appSettings.smoothWires && w.path.length > 2;
+    const shouldSmoothWire = false;
     const cornerRadius = 8;
 
     ctx.beginPath();
@@ -397,6 +398,19 @@ export const drawWire = (
         }
     }
     ctx.stroke();
+
+    if (selectedSegmentIndex !== null && w.path[selectedSegmentIndex] && w.path[selectedSegmentIndex + 1]) {
+        const a = w.path[selectedSegmentIndex];
+        const b = w.path[selectedSegmentIndex + 1];
+        ctx.save();
+        ctx.strokeStyle = theme.selected;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.restore();
+    }
     
     if (isSimulating && appSettings.showCurrent && Math.abs(w.simData.current) > 1e-6) {
         // Wire current sign is computed along the wire path (point A -> point B).
@@ -484,5 +498,17 @@ export const drawWire = (
 
             accumulatedLen += segLen;
         }
+    }
+
+    if (w.path.length >= 2) {
+        const a = w.path[0];
+        const b = w.path[w.path.length - 1];
+        ctx.save();
+        ctx.fillStyle = isSelected ? theme.selected : theme.componentStroke;
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, 3.5, 0, Math.PI * 2);
+        ctx.arc(b.x, b.y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
     }
 };

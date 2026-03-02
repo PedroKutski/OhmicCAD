@@ -220,9 +220,7 @@ const App: React.FC = () => {
       obstacles: Set<string>,
       softObstacles?: Set<string>
   ) => {
-      if (anchor) {
-          return buildOrthogonalPath(pA, pB, anchor);
-      }
+      if (anchor) return buildOrthogonalPath(pA, pB, anchor);
       return findSmartPath(pA, pB, obstacles, undefined, softObstacles);
   }, []);
 
@@ -390,11 +388,7 @@ const App: React.FC = () => {
     const pB = getAbsPorts(cB).find(p => p.id === end.portId)!;
     
     const obstacles = getObstacles(components);
-    const defaultAnchor = {
-      x: Math.round(((pA.x + pB.x) / 2) / GRID_STEP) * GRID_STEP,
-      y: Math.round(((pA.y + pB.y) / 2) / GRID_STEP) * GRID_STEP
-    };
-    const path = createWirePath(pA, pB, defaultAnchor, obstacles);
+    const path = createWirePath(pA, pB, null, obstacles);
 
     // Check for intersections with existing wires
     let intersectionPoint: {x: number, y: number} | null = null;

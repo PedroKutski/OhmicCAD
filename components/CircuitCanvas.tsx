@@ -51,7 +51,8 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
   const dragStartPosRef = useRef<Map<string, {x: number, y: number}>>(new Map());
   const [isPanning, setIsPanning] = useState(false);
   const [draggingCompId, setDraggingCompId] = useState<string | null>(null);
-  const [draggingWireId, setDraggingWireId] = useState<string | null>(null);
+  const [selectedWireSegment, setSelectedWireSegment] = useState<{ wireId: string; segmentIndex: number } | null>(null);
+  const [draggingWireEndpoint, setDraggingWireEndpoint] = useState<{ wireId: string; side: 'start' | 'end' } | null>(null);
   const [selectionRect, setSelectionRect] = useState<{ start: { x: number, y: number }, end: { x: number, y: number } } | null>(null);
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const viewRef = useRef(view);
@@ -60,8 +61,6 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [activeButtonId, setActiveButtonId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-
-  const wireDragOffsetRef = useRef({ x: 0, y: 0 });
 
 
   useEffect(() => {
@@ -118,7 +117,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
 
         // Draw wires
         wires.forEach(w => {
-            drawWire(ctx, w, theme, false, false, appSettings, 0);
+            drawWire(ctx, w, theme, false, false, appSettings, 0, null);
         });
 
         // Draw components
@@ -173,7 +172,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
   }, [components, getAbsPorts]);
 
   const findWireAt = (wx: number, wy: number) => {
-    let best: { wire: WireModel; point: { x: number; y: number }; distance: number } | null = null;
+    let best: { wire: WireModel; point: { x: number; y: number }; distance: number; segmentIndex: number } | null = null;
 
     for (const w of wires) {
         if (w.path.length < 2) continue;
@@ -192,13 +191,24 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
             const distance = Math.hypot(wx - projected.x, wy - projected.y);
 
             if (distance < 10 && (!best || distance < best.distance)) {
-                best = { wire: w, point: projected, distance };
+                best = { wire: w, point: projected, distance, segmentIndex: i };
             }
         }
     }
 
     if (!best) return null;
-    return { wire: best.wire, point: best.point };
+
+    const start = best.wire.path[0];
+    const end = best.wire.path[best.wire.path.length - 1];
+    const nearStart = Math.hypot(wx - start.x, wy - start.y) < 12;
+    const nearEnd = Math.hypot(wx - end.x, wy - end.y) < 12;
+
+    return {
+      wire: best.wire,
+      point: best.point,
+      segmentIndex: best.segmentIndex,
+      endpointSide: nearStart ? 'start' as const : nearEnd ? 'end' as const : null
+    };
   };
 
 
@@ -244,12 +254,62 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
     }
 
     wires.forEach(w => {
-        drawWire(ctx, w, THEME, selectedIds.includes(w.id), isSimulating, appSettings, visualTimeRef.current);
+        drawWire(ctx, w, THEME, selectedIds.includes(w.id), isSimulating, appSettings, visualTimeRef.current, selectedWireSegment?.wireId === w.id ? selectedWireSegment.segmentIndex : null);
     });
 
     components.forEach(c => {
         drawComponent(ctx, c, THEME, selectedIds.includes(c.id), isSimulating, appSettings, visualTimeRef.current);
     });
+
+    // Highlight graphic-only crossings (no electrical node/junction).
+    const fakeCrossings: { x: number; y: number }[] = [];
+    const hasJunctionAt = (x: number, y: number) => components.some(c => c.type === ComponentType.Junction && Math.hypot(c.x - x, c.y - y) < 2);
+    const segmentIntersection = (a1: {x:number;y:number}, a2: {x:number;y:number}, b1: {x:number;y:number}, b2: {x:number;y:number}) => {
+        const den = (a1.x - a2.x) * (b1.y - b2.y) - (a1.y - a2.y) * (b1.x - b2.x);
+        if (Math.abs(den) < 1e-6) return null;
+        const px = ((a1.x * a2.y - a1.y * a2.x) * (b1.x - b2.x) - (a1.x - a2.x) * (b1.x * b2.y - b1.y * b2.x)) / den;
+        const py = ((a1.x * a2.y - a1.y * a2.x) * (b1.y - b2.y) - (a1.y - a2.y) * (b1.x * b2.y - b1.y * b2.x)) / den;
+        const within = (p:number,a:number,b:number)=> p >= Math.min(a,b)-1e-6 && p <= Math.max(a,b)+1e-6;
+        if (within(px,a1.x,a2.x) && within(py,a1.y,a2.y) && within(px,b1.x,b2.x) && within(py,b1.y,b2.y)) return {x:px,y:py};
+        return null;
+    };
+
+    for (let i = 0; i < wires.length; i++) {
+        for (let j = i + 1; j < wires.length; j++) {
+            const wa = wires[i], wb = wires[j];
+            for (let sa = 0; sa < wa.path.length - 1; sa++) {
+                for (let sb = 0; sb < wb.path.length - 1; sb++) {
+                    const inter = segmentIntersection(wa.path[sa], wa.path[sa + 1], wb.path[sb], wb.path[sb + 1]);
+                    if (!inter) continue;
+                    const gx = Math.round(inter.x / GRID_STEP) * GRID_STEP;
+                    const gy = Math.round(inter.y / GRID_STEP) * GRID_STEP;
+                    const isEndpoint = (w: WireModel, x: number, y: number) =>
+                        w.path.some((p, idx) => (idx === 0 || idx === w.path.length - 1) && Math.hypot(p.x - x, p.y - y) < 1);
+                    if (!isEndpoint(wa, gx, gy) && !isEndpoint(wb, gx, gy) && !hasJunctionAt(gx, gy)) {
+                        fakeCrossings.push({ x: gx, y: gy });
+                    }
+                }
+            }
+        }
+    }
+
+    if (fakeCrossings.length > 0) {
+        ctx.save();
+        ctx.strokeStyle = '#ff4d4d';
+        ctx.lineWidth = 2;
+        fakeCrossings.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(p.x - 4, p.y - 4);
+            ctx.lineTo(p.x + 4, p.y + 4);
+            ctx.moveTo(p.x + 4, p.y - 4);
+            ctx.lineTo(p.x - 4, p.y + 4);
+            ctx.stroke();
+        });
+        ctx.restore();
+    }
 
     if (connectionStart) {
         ctx.strokeStyle = THEME.selected; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
@@ -359,7 +419,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
 
     ctx.restore();
     // Remove requestAnimationFrame(render) from here, let useEffect handle the loop
-  }, [components, wires, view, selectedIds, connectionStart, placementMode, isSimulating, isPaused, appSettings, worldToGrid, findPortAt, getAbsPorts, selectionRect, draggingCompId, isPanning]);
+  }, [components, wires, view, selectedIds, connectionStart, placementMode, isSimulating, isPaused, appSettings, worldToGrid, findPortAt, getAbsPorts, selectionRect, draggingCompId, isPanning, selectedWireSegment]);
 
   useEffect(() => {
     let animationFrameId: number;
@@ -421,6 +481,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
         if (!selectedIds.includes(comp.id)) {
             setSelectedIds([comp.id]);
         }
+        setSelectedWireSegment(null);
         if (isSimulating) {
             // Allow interaction with switches/buttons during simulation
             if (comp.type === ComponentType.Switch || comp.type === ComponentType.PushButton) {
@@ -449,14 +510,10 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
     const wire = findWireAt(world.x, world.y);
     if (wire) {
         setSelectedIds([wire.wire.id]);
+        setSelectedWireSegment({ wireId: wire.wire.id, segmentIndex: wire.segmentIndex });
         onCloseProperties();
-        if (!isSimulating) {
-            setDraggingWireId(wire.wire.id);
-            const baseAnchor = wire.wire.anchor || worldToGrid(wire.point.x, wire.point.y);
-            wireDragOffsetRef.current = {
-                x: baseAnchor.x - world.x,
-                y: baseAnchor.y - world.y
-            };
+        if (!isSimulating && wire.endpointSide) {
+            setDraggingWireEndpoint({ wireId: wire.wire.id, side: wire.endpointSide });
         }
         return;
     }
@@ -467,6 +524,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
     }
     
     setSelectedIds([]);
+    setSelectedWireSegment(null);
     onCloseProperties();
   };
 
@@ -525,29 +583,8 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
                 return w;
             }));
             lastMouseRef.current = { x: e.clientX, y: e.clientY };
-        } else if (draggingWireId) {
-            const world = screenToWorld(e.clientX, e.clientY);
-            const nextAnchor = worldToGrid(
-                world.x + wireDragOffsetRef.current.x,
-                world.y + wireDragOffsetRef.current.y
-            );
-
-            setWires(prev => prev.map(w => {
-                if (w.id !== draggingWireId) return w;
-                const cA = components.find(c => c.id === w.compAId);
-                const cB = components.find(c => c.id === w.compBId);
-                if (!cA || !cB) return w;
-
-                const pA = getAbsPorts(cA).find(p => p.id === w.portAIndex);
-                const pB = getAbsPorts(cB).find(p => p.id === w.portBIndex);
-                if (!pA || !pB) return w;
-
-                return {
-                    ...w,
-                    anchor: nextAnchor,
-                    path: buildWirePath(pA, pB, nextAnchor)
-                };
-            }));
+        } else if (draggingWireEndpoint) {
+            // Endpoint drag is finalized on mouse up (reconnect to an existing real node).
         } else if (selectionRect) {
             const world = screenToWorld(e.clientX, e.clientY);
             setSelectionRect(prev => prev ? { ...prev, end: world } : null);
@@ -595,14 +632,25 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
             dragStartPosRef.current.clear();
         }
 
-        if (draggingWireId) {
-            setDraggingWireId(null);
+        if (draggingWireEndpoint) {
+            const world = screenToWorld(e.clientX, e.clientY);
+            const dropPort = findPortAt(world.x, world.y);
+            if (dropPort) {
+                setWires(prev => prev.map(w => {
+                    if (w.id !== draggingWireEndpoint.wireId) return w;
+                    if (draggingWireEndpoint.side === 'start') {
+                        return { ...w, compAId: dropPort.compId, portAIndex: dropPort.portId, anchor: null };
+                    }
+                    return { ...w, compBId: dropPort.compId, portBIndex: dropPort.portId, anchor: null };
+                }));
+            }
+            setDraggingWireEndpoint(null);
         }
 
         setIsPanning(false);
     };
 
-    if (isPanning || draggingCompId || draggingWireId || selectionRect) {
+    if (isPanning || draggingCompId || draggingWireEndpoint || selectionRect) {
         window.addEventListener('mousemove', handleGlobalMouseMove);
         window.addEventListener('mouseup', handleGlobalMouseUp);
     }
@@ -611,13 +659,13 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
         window.removeEventListener('mousemove', handleGlobalMouseMove);
         window.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [isPanning, draggingCompId, draggingWireId, selectionRect, setView, screenToWorld, worldToGrid, setComponents, setWires, components, getAbsPorts, selectedIds, setSelectedIds, onOpenProperties, onCloseProperties, buildWirePath, onDragEnd]);
+  }, [isPanning, draggingCompId, draggingWireEndpoint, selectionRect, setView, screenToWorld, worldToGrid, setComponents, setWires, components, getAbsPorts, selectedIds, setSelectedIds, onOpenProperties, onCloseProperties, buildWirePath, onDragEnd]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     const world = screenToWorld(e.clientX, e.clientY);
     mouseWorldRef.current = world;
     
-    if (isPanning || draggingCompId || draggingWireId || placementMode || selectionRect) {
+    if (isPanning || draggingCompId || draggingWireEndpoint || placementMode || selectionRect) {
         setHoveredId(null);
         return;
     }
@@ -646,16 +694,12 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
     if (connectionStart) {
         const port = findPortAt(mouseWorldRef.current.x, mouseWorldRef.current.y);
         if (port) onAddWire(connectionStart, port);
-        else {
-            const wire = findWireAt(mouseWorldRef.current.x, mouseWorldRef.current.y);
-            if (wire) onWireJoin(wire.wire, worldToGrid(mouseWorldRef.current.x, mouseWorldRef.current.y));
-        }
     }
     if (placementMode) {
         const grid = worldToGrid(mouseWorldRef.current.x, mouseWorldRef.current.y);
         onAddComponent(placementMode.type, grid.x, grid.y, placementMode.rotation);
     }
-    setIsPanning(false); setDraggingCompId(null); setDraggingWireId(null); setConnectionStart(null);
+    setIsPanning(false); setDraggingCompId(null); setDraggingWireEndpoint(null); setConnectionStart(null);
   };
 
   const handleWheel = (e: React.WheelEvent) => {
