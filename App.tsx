@@ -4,7 +4,7 @@ import {
   ComponentType, ComponentModel, WireModel, ViewState, 
   Port, ComponentProps, AppSettings, THEME, GRID_STEP, Theme
 } from './types';
-import { rotatePoint, findSmartPath, distPointToSegment, findIntersection } from './utils/geometry';
+import { rotatePoint, findSmartPath, distPointToSegment, findIntersection, buildOrthogonalPath } from './utils/geometry';
 import { formatUnit } from './utils/formatting';
 import { Sidebar } from './components/Sidebar';
 import { PropertiesPanel } from './components/PropertiesPanel';
@@ -212,6 +212,20 @@ const App: React.FC = () => {
       return obstacles;
   }, []);
 
+
+  const createWirePath = useCallback((
+      pA: Port,
+      pB: Port,
+      anchor: { x: number; y: number } | null,
+      obstacles: Set<string>,
+      softObstacles?: Set<string>
+  ) => {
+      if (anchor) {
+          return buildOrthogonalPath(pA, pB, anchor);
+      }
+      return findSmartPath(pA, pB, obstacles, undefined, softObstacles);
+  }, []);
+
   // Trigger wire path recalculation when components move or rotate
   const lastLayoutHash = useRef('');
   
@@ -237,11 +251,11 @@ const App: React.FC = () => {
                   }
               });
 
-              return { ...w, path: findSmartPath(pA, pB, componentObstacles, undefined, wireObstacles) };
+              return { ...w, path: createWirePath(pA, pB, w.anchor, componentObstacles, wireObstacles) };
           }
           return w;
       }));
-  }, [components, getAbsPorts, getObstacles, isSimulating]);
+  }, [components, createWirePath, getAbsPorts, getObstacles, isSimulating]);
 
 
 
@@ -376,7 +390,11 @@ const App: React.FC = () => {
     const pB = getAbsPorts(cB).find(p => p.id === end.portId)!;
     
     const obstacles = getObstacles(components);
-    const path = findSmartPath(pA, pB, obstacles);
+    const defaultAnchor = {
+      x: Math.round(((pA.x + pB.x) / 2) / GRID_STEP) * GRID_STEP,
+      y: Math.round(((pA.y + pB.y) / 2) / GRID_STEP) * GRID_STEP
+    };
+    const path = createWirePath(pA, pB, defaultAnchor, obstacles);
 
     // Check for intersections with existing wires
     let intersectionPoint: {x: number, y: number} | null = null;
@@ -477,7 +495,7 @@ const App: React.FC = () => {
     } else {
         const newWire: WireModel = {
           id: `wire_${Date.now()}`, compAId: start.compId, portAIndex: start.portId, compBId: end.compId, portBIndex: end.portId,
-          anchor: null, path, selected: false,
+          anchor: defaultAnchor, path, selected: false,
           simData: { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0 },
           props: { name: 'Wire' }
         };
