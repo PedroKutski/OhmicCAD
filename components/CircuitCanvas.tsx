@@ -4,7 +4,7 @@ import {
   ComponentModel, WireModel, ViewState, ComponentType, 
   THEME, GRID_SIZE, GRID_STEP, Port, AppSettings, SimData
 } from '../types';
-import { rotatePoint, distPointToSegment, findSmartPath } from '../utils/geometry';
+import { findSmartPath } from '../utils/geometry';
 import { formatUnit } from '../utils/formatting';
 import { drawComponent, drawWire } from './CircuitRenderer';
 
@@ -14,6 +14,7 @@ interface CircuitCanvasProps {
   view: ViewState;
   setView: React.Dispatch<React.SetStateAction<ViewState>>;
   isSimulating: boolean;
+  isPaused: boolean;
   placementMode: { type: ComponentType; rotation: number } | null;
   setPlacementMode: React.Dispatch<React.SetStateAction<{ type: ComponentType; rotation: number } | null>>;
   selectedIds: string[];
@@ -42,7 +43,7 @@ export interface CircuitCanvasHandle {
 export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>(({
   components, wires, view, setView, placementMode, setPlacementMode,
   selectedIds, setSelectedIds, onAddComponent, onAddWire, onWireJoin, onRotateSelected, onDragEnd, connectionStart, setConnectionStart,
-  setComponents, setWires, getAbsPorts, onOpenProperties, onCloseProperties, onContextMenu, isSimulating, appSettings
+  setComponents, setWires, getAbsPorts, onOpenProperties, onCloseProperties, onContextMenu, isSimulating, isPaused, appSettings
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseWorldRef = useRef({ x: 0, y: 0 });
@@ -168,14 +169,32 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
   }, [components, getAbsPorts]);
 
   const findWireAt = (wx: number, wy: number) => {
+    let best: { wire: WireModel; point: { x: number; y: number }; distance: number } | null = null;
+
     for (const w of wires) {
         if (w.path.length < 2) continue;
+
         for (let i = 0; i < w.path.length - 1; i++) {
-            const p1 = w.path[i], p2 = w.path[i+1];
-            if (distPointToSegment({x: wx, y: wy}, p1, p2) < 10) return { wire: w, point: p1 };
+            const p1 = w.path[i], p2 = w.path[i + 1];
+            const segDx = p2.x - p1.x;
+            const segDy = p2.y - p1.y;
+            const segLenSq = (segDx * segDx) + (segDy * segDy);
+            if (segLenSq < 1e-6) continue;
+
+            let t = (((wx - p1.x) * segDx) + ((wy - p1.y) * segDy)) / segLenSq;
+            t = Math.max(0, Math.min(1, t));
+
+            const projected = { x: p1.x + (segDx * t), y: p1.y + (segDy * t) };
+            const distance = Math.hypot(wx - projected.x, wy - projected.y);
+
+            if (distance < 10 && (!best || distance < best.distance)) {
+                best = { wire: w, point: projected, distance };
+            }
         }
     }
-    return null;
+
+    if (!best) return null;
+    return { wire: best.wire, point: best.point };
   };
 
   const render = useCallback(() => {
@@ -253,7 +272,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
         ctx.setLineDash([]);
     }
 
-    if ((hoveredId || selectedIds.length === 1) && isSimulating) {
+    if ((hoveredId || selectedIds.length === 1) && (isSimulating || isPaused)) {
         const targetId = hoveredId || selectedIds[0];
         const target = components.find(c => c.id === targetId) || wires.find(w => w.id === targetId);
         if (target) {
@@ -324,7 +343,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
 
     ctx.restore();
     // Remove requestAnimationFrame(render) from here, let useEffect handle the loop
-  }, [components, wires, view, selectedIds, connectionStart, placementMode, isSimulating, appSettings, worldToGrid, findPortAt, getAbsPorts, selectionRect, draggingCompId, isPanning]);
+  }, [components, wires, view, selectedIds, connectionStart, placementMode, isSimulating, isPaused, appSettings, worldToGrid, findPortAt, getAbsPorts, selectionRect, draggingCompId, isPanning]);
 
   useEffect(() => {
     let animationFrameId: number;
