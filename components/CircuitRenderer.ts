@@ -346,6 +346,7 @@ export const drawWire = (
     ctx.lineJoin = 'round';
 
     const shouldSmoothWire = !!appSettings.smoothWires && w.path.length > 2;
+    const cornerRadius = 8;
 
     ctx.beginPath();
     if (w.path.length > 0) {
@@ -353,11 +354,40 @@ export const drawWire = (
 
         if (shouldSmoothWire) {
             for (let i = 1; i < w.path.length - 1; i++) {
-                const p = w.path[i];
+                const prev = w.path[i - 1];
+                const current = w.path[i];
                 const next = w.path[i + 1];
-                const midX = (p.x + next.x) / 2;
-                const midY = (p.y + next.y) / 2;
-                ctx.quadraticCurveTo(p.x, p.y, midX, midY);
+
+                const inDx = current.x - prev.x;
+                const inDy = current.y - prev.y;
+                const outDx = next.x - current.x;
+                const outDy = next.y - current.y;
+                const inLen = Math.hypot(inDx, inDy);
+                const outLen = Math.hypot(outDx, outDy);
+
+                if (inLen < 1e-6 || outLen < 1e-6) {
+                    ctx.lineTo(current.x, current.y);
+                    continue;
+                }
+
+                const isCorner = (inDx !== 0 && outDy !== 0) || (inDy !== 0 && outDx !== 0);
+                if (!isCorner) {
+                    ctx.lineTo(current.x, current.y);
+                    continue;
+                }
+
+                const radius = Math.min(cornerRadius, inLen / 2, outLen / 2);
+                const start = {
+                    x: current.x - (inDx / inLen) * radius,
+                    y: current.y - (inDy / inLen) * radius,
+                };
+                const end = {
+                    x: current.x + (outDx / outLen) * radius,
+                    y: current.y + (outDy / outLen) * radius,
+                };
+
+                ctx.lineTo(start.x, start.y);
+                ctx.quadraticCurveTo(current.x, current.y, end.x, end.y);
             }
 
             const end = w.path[w.path.length - 1];
