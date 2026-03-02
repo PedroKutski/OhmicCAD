@@ -4,7 +4,7 @@ import {
   ComponentModel, WireModel, ViewState, ComponentType, 
   THEME, GRID_SIZE, GRID_STEP, Port, AppSettings, SimData
 } from '../types';
-import { findSmartPath } from '../utils/geometry';
+import { findSmartPath, buildOrthogonalPath } from '../utils/geometry';
 import { formatUnit } from '../utils/formatting';
 import { drawComponent, drawWire } from './CircuitRenderer';
 
@@ -51,6 +51,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
   const dragStartPosRef = useRef<Map<string, {x: number, y: number}>>(new Map());
   const [isPanning, setIsPanning] = useState(false);
   const [draggingCompId, setDraggingCompId] = useState<string | null>(null);
+  const [draggingWireId, setDraggingWireId] = useState<string | null>(null);
   const [selectionRect, setSelectionRect] = useState<{ start: { x: number, y: number }, end: { x: number, y: number } } | null>(null);
   const lastMouseRef = useRef({ x: 0, y: 0 });
   const viewRef = useRef(view);
@@ -59,6 +60,9 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [activeButtonId, setActiveButtonId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  const wireDragOffsetRef = useRef({ x: 0, y: 0 });
+
 
   useEffect(() => {
     viewRef.current = view;
@@ -196,6 +200,16 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
     if (!best) return null;
     return { wire: best.wire, point: best.point };
   };
+
+
+  const buildWirePath = useCallback((
+    start: Port,
+    end: Port,
+    anchor: { x: number; y: number } | null
+  ) => {
+    if (anchor) return buildOrthogonalPath(start, end, anchor);
+    return findSmartPath(start, end, new Set());
+  }, []);
 
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -433,10 +447,18 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
     }
     
     const wire = findWireAt(world.x, world.y);
-    if (wire) { 
-        setSelectedIds([wire.wire.id]); 
+    if (wire) {
+        setSelectedIds([wire.wire.id]);
         onCloseProperties();
-        return; 
+        if (!isSimulating) {
+            setDraggingWireId(wire.wire.id);
+            const baseAnchor = wire.wire.anchor || worldToGrid(wire.point.x, wire.point.y);
+            wireDragOffsetRef.current = {
+                x: baseAnchor.x - world.x,
+                y: baseAnchor.y - world.y
+            };
+        }
+        return;
     }
     
     // If nothing hit, start selection box
@@ -478,7 +500,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
                 
                 if (isA || isB) {
                     let cA = components.find(c => c.id === w.compAId);
-                    if (!cA) return w; // Safety check
+                    if (!cA) return w;
 
                     if (isA) {
                         const start = dragStartPosRef.current.get(w.compAId)!;
@@ -486,7 +508,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
                     }
                     
                     let cB = components.find(c => c.id === w.compBId);
-                    if (!cB) return w; // Safety check
+                    if (!cB) return w;
 
                     if (isB) {
                         const start = dragStartPosRef.current.get(w.compBId)!;
@@ -496,13 +518,36 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
                     const pA = getAbsPorts(cA).find(p => p.id === w.portAIndex);
                     const pB = getAbsPorts(cB).find(p => p.id === w.portBIndex);
                     
-                    if (!pA || !pB) return w; // Safety check
+                    if (!pA || !pB) return w;
 
-                    return { ...w, path: findSmartPath(pA, pB, new Set()) };
+                    return { ...w, path: buildWirePath(pA, pB, w.anchor) };
                 }
                 return w;
             }));
             lastMouseRef.current = { x: e.clientX, y: e.clientY };
+        } else if (draggingWireId) {
+            const world = screenToWorld(e.clientX, e.clientY);
+            const nextAnchor = worldToGrid(
+                world.x + wireDragOffsetRef.current.x,
+                world.y + wireDragOffsetRef.current.y
+            );
+
+            setWires(prev => prev.map(w => {
+                if (w.id !== draggingWireId) return w;
+                const cA = components.find(c => c.id === w.compAId);
+                const cB = components.find(c => c.id === w.compBId);
+                if (!cA || !cB) return w;
+
+                const pA = getAbsPorts(cA).find(p => p.id === w.portAIndex);
+                const pB = getAbsPorts(cB).find(p => p.id === w.portBIndex);
+                if (!pA || !pB) return w;
+
+                return {
+                    ...w,
+                    anchor: nextAnchor,
+                    path: buildWirePath(pA, pB, nextAnchor)
+                };
+            }));
         } else if (selectionRect) {
             const world = screenToWorld(e.clientX, e.clientY);
             setSelectionRect(prev => prev ? { ...prev, end: world } : null);
@@ -550,10 +595,14 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
             dragStartPosRef.current.clear();
         }
 
+        if (draggingWireId) {
+            setDraggingWireId(null);
+        }
+
         setIsPanning(false);
     };
 
-    if (isPanning || draggingCompId || selectionRect) {
+    if (isPanning || draggingCompId || draggingWireId || selectionRect) {
         window.addEventListener('mousemove', handleGlobalMouseMove);
         window.addEventListener('mouseup', handleGlobalMouseUp);
     }
@@ -562,13 +611,13 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
         window.removeEventListener('mousemove', handleGlobalMouseMove);
         window.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [isPanning, draggingCompId, selectionRect, setView, screenToWorld, worldToGrid, setComponents, setWires, components, getAbsPorts, selectedIds, setSelectedIds, onOpenProperties, onCloseProperties]);
+  }, [isPanning, draggingCompId, draggingWireId, selectionRect, setView, screenToWorld, worldToGrid, setComponents, setWires, components, getAbsPorts, selectedIds, setSelectedIds, onOpenProperties, onCloseProperties, buildWirePath, onDragEnd]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     const world = screenToWorld(e.clientX, e.clientY);
     mouseWorldRef.current = world;
     
-    if (isPanning || draggingCompId || placementMode || selectionRect) {
+    if (isPanning || draggingCompId || draggingWireId || placementMode || selectionRect) {
         setHoveredId(null);
         return;
     }
@@ -606,7 +655,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
         const grid = worldToGrid(mouseWorldRef.current.x, mouseWorldRef.current.y);
         onAddComponent(placementMode.type, grid.x, grid.y, placementMode.rotation);
     }
-    setIsPanning(false); setDraggingCompId(null); setConnectionStart(null);
+    setIsPanning(false); setDraggingCompId(null); setDraggingWireId(null); setConnectionStart(null);
   };
 
   const handleWheel = (e: React.WheelEvent) => {

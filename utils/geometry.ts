@@ -34,6 +34,36 @@ export function findIntersection(p1: {x:number, y:number}, p2: {x:number, y:numb
     return null;
 }
 
+const pointEquals = (a: {x:number, y:number}, b: {x:number, y:number}) => a.x === b.x && a.y === b.y;
+
+export function buildOrthogonalPath(
+  start: {x:number, y:number},
+  end: {x:number, y:number},
+  anchor: {x:number, y:number}
+) {
+  const path = [
+    { x: start.x, y: start.y },
+    { x: anchor.x, y: start.y },
+    { x: anchor.x, y: anchor.y },
+    { x: end.x, y: anchor.y },
+    { x: end.x, y: end.y }
+  ];
+
+  const deduped = path.filter((point, index, arr) => index === 0 || !pointEquals(point, arr[index - 1]));
+  if (deduped.length <= 2) return deduped;
+
+  const simplified = [deduped[0]];
+  for (let i = 1; i < deduped.length - 1; i++) {
+    const prev = simplified[simplified.length - 1];
+    const current = deduped[i];
+    const next = deduped[i + 1];
+    const isCollinear = (prev.x === current.x && current.x === next.x) || (prev.y === current.y && current.y === next.y);
+    if (!isCollinear) simplified.push(current);
+  }
+  simplified.push(deduped[deduped.length - 1]);
+  return simplified;
+}
+
 // JPS-like A* implementation for Manhattan grid
 export function findSmartPath(
   start: {x:number, y:number}, 
