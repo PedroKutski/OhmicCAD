@@ -142,7 +142,12 @@ const App: React.FC = () => {
         const timeBudget = 12; // Max ms to spend on physics per frame (leave 4ms for rendering)
 
         for (let i = 0; i < stepsToRun; i++) {
-            CircuitSolver.solve(componentsRef.current, wiresRef.current, dt, simTimeRef.current);
+            const result = CircuitSolver.solve(componentsRef.current, wiresRef.current, dt, simTimeRef.current);
+            if (!result.ok) {
+                setStatusMsg(result.error || 'Falha na simulação.');
+                setIsPaused(true);
+                break;
+            }
             simTimeRef.current += dt;
             
             // Bail if we're taking too long
