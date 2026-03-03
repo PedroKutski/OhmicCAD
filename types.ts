@@ -60,6 +60,7 @@ export interface ComponentProps {
   closed?: boolean;
   tolerance?: number;
   maxCurrent?: number; 
+  saturationCurrent?: number; // Saturation current for diode/LED Shockley model (A)
 }
 
 export interface Port {
