@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ComponentModel, ComponentType } from '../types';
+import { formatUnit } from '../utils/formatting';
 
 interface GraphConfig {
   id: string;
@@ -166,7 +167,7 @@ export const GraphPanel: React.FC<GraphPanelProps> = ({ graphs, components, onRe
                         stroke="#00e5ff" 
                         fontSize={10} 
                         width={40} 
-                        tickFormatter={(val) => val.toExponential(1)}
+                        tickFormatter={(val: number) => formatUnit(val, 'V')}
                     />
                 )}
                 
@@ -178,14 +179,17 @@ export const GraphPanel: React.FC<GraphPanelProps> = ({ graphs, components, onRe
                         stroke="#ff9d00" 
                         fontSize={10} 
                         width={40} 
-                        tickFormatter={(val) => val.toExponential(1)}
+                        tickFormatter={(val: number) => formatUnit(val, 'A')}
                     />
                 )}
 
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#252525', border: '1px solid #444', color: '#fff' }}
                   labelStyle={{ color: '#888' }}
-                  formatter={(value: number, name: string) => [value.toExponential(3), name === 'voltage' ? 'Voltage (V)' : 'Current (A)']}
+                  formatter={(value: number, name: string) => [
+                    formatUnit(value, name === 'voltage' ? 'V' : 'A'),
+                    name === 'voltage' ? 'Voltage' : 'Current'
+                  ]}
                   labelFormatter={(label: number) => `t=${label.toFixed(2)}s`}
                 />
                 
