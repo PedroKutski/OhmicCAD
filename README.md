@@ -2,62 +2,79 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# OhmicCAD
 
-This contains everything you need to run your app locally.
+Simulador eletrônico interativo com solver não linear, visualização em tempo real e interface React.
 
-View your app in AI Studio: https://ai.studio/apps/85cd801a-10b5-4948-9e13-3adfd7cdbb01
+## Requisitos
 
-## Run Locally
+- Node.js 20+ (recomendado)
+- npm 10+
 
-**Prerequisites:**  Node.js
+## Setup local
 
+1. Instale as dependências:
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+   ```bash
+   npm install
+   ```
 
-## Arquitetura do Solver (módulo canônico)
+2. Crie o arquivo de ambiente local e configure a chave da API Gemini:
 
-- A lógica física canônica do simulador está em `engine/analysis/circuitEngine.ts`.
-- Este módulo centraliza dispositivos lineares/não lineares, montagem MNA e iteração de Newton.
-- `services/Solver.ts` é apenas um adaptador de fronteira: traduz `ComponentModel/WireModel` para tipos da engine e aplica o resultado de volta ao estado da UI.
-- Regras físicas na UI devem ser evitadas. A UI deve apenas exibir valores e textos, sem reimplementar modelos elétricos.
+   ```bash
+   cp .env.example .env.local
+   ```
 
-## Como adicionar novos dispositivos
+   Se `.env.example` não existir, crie `.env.local` com:
 
-1. **Defina o comportamento físico na engine**
-   - Inclua o novo tipo em `solveCircuit` dentro de `engine/analysis/circuitEngine.ts`.
-   - Faça o stamping linear/não linear e atualização de estado (`componentStates`) no mesmo módulo.
-2. **Exponha os dados necessários no adaptador**
-   - Em `services/Solver.ts`, garanta o mapeamento das propriedades do novo componente para `EngineComponent.props`.
-   - Se houver novos campos de estado, mapeie ida/volta (`simData`) no adaptador.
-3. **Atualize apenas apresentação na UI**
-   - Ajuste painéis, rótulos e formulários (`PropertiesPanel`, `CircuitRenderer`, etc.) para entrada/visualização.
-   - Não duplique fórmulas físicas já existentes na engine.
+   ```env
+   GEMINI_API_KEY=sua_chave_aqui
+   ```
 
-## Roadmap
+3. Inicie em modo desenvolvimento:
 
-- Melhorar a robustez e a precisão do solver elétrico.
-- Criar templates de circuitos para casos de uso comuns.
-- Evoluir a UX da biblioteca de componentes.
+   ```bash
+   npm run dev
+   ```
+
+4. Acesse `http://localhost:5173`.
+
+## Scripts úteis
+
+- `npm run dev` — sobe a aplicação local.
+- `npm run build` — gera build de produção.
+- `npm run lint` — valida tipagem TypeScript (`tsc --noEmit`).
+- `npm run preview` — serve build local para validação.
+
+## Arquitetura (visão breve)
+
+- **UI (React + Vite):** renderização do editor, painéis de propriedades e interação do usuário (`App.tsx`, `components/*`).
+- **Solver (engine canônica):** regras físicas e análise de circuito em `engine/analysis/circuitEngine.ts`, incluindo MNA, dispositivos lineares/não lineares e iteração de Newton.
+- **Dados e adaptação:** `services/Solver.ts` converte modelos da UI (`ComponentModel`/`WireModel`) para o formato da engine e reconcilia resultados no estado de simulação; dados estáticos de apoio ficam em `data/*`.
 
 ## Contribuição
 
-Fluxo básico para contribuir:
+Fluxo sugerido:
 
-1. Abra uma issue descrevendo bug, melhoria ou nova funcionalidade.
-2. Faça um fork/branch com uma alteração focada.
-3. Envie um Pull Request referenciando a issue.
-4. Ajuste o PR conforme revisão até aprovação.
+1. Abra uma issue descrevendo bug, melhoria ou funcionalidade.
+2. Crie uma branch com escopo pequeno e focado.
+3. Envie um PR referenciando a issue.
+4. Ajuste o PR conforme revisão.
+
+### Checklist de Pull Request
+
+- [ ] `npm run build` executa sem erros.
+- [ ] `npm run lint` executa sem erros.
+- [ ] Documentação atualizada (README, comentários e/ou instruções técnicas).
+- [ ] Mudanças em UI/fluxo foram verificadas manualmente.
+- [ ] Novas decisões técnicas foram registradas de forma clara no PR.
 
 ## Licença
 
-**Definir:** arquivo de licença ainda não identificado no repositório raiz.
+Este projeto atualmente **não possui uma licença open source publicada**.
+Na ausência de um arquivo `LICENSE`, todos os direitos são reservados ao autor.
 
-## Contato / Autor
+## Autor e contato
 
-- **Autor:** definir.
-- **Contato:** definir.
+- **Autor:** Pedro Kutski
+- **Contato:** pedrokutski@outlook.com
