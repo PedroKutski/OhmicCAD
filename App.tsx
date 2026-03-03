@@ -712,35 +712,19 @@ const App: React.FC = () => {
                   `   Resultado: P = ${fmt(pFromV2R)} W`
               );
           } else if (component.type === ComponentType.Capacitor || component.type === ComponentType.PolarizedCapacitor) {
-              const C = component.props.capacitance || 0;
-              const dvdt = C !== 0 ? I / C : 0;
-              const energy = 0.5 * C * V * V;
-              const charge = C * V;
+              const charge = (component.props.capacitance || 0) * V;
               lines.push(
-                  `1) Corrente no capacitor: I = C × dV/dt`,
-                  `   Reorganizando: dV/dt = I / C`,
-                  `   Substituindo: dV/dt = (${fmt(I)}) / (${fmt(C)})`,
-                  `   Resultado: dV/dt = ${fmt(dvdt)} V/s`,
-                  `2) Carga armazenada: Q = C × V`,
-                  `   Substituindo: Q = (${fmt(C)}) × (${fmt(V)})`,
+                  `1) Estado transitório calculado pela engine canônica (engine/analysis/circuitEngine.ts).`,
+                  `2) Carga estimada para referência visual: Q = C × V`,
+                  `   Substituindo: Q = (${fmt(component.props.capacitance || 0)}) × (${fmt(V)})`,
                   `   Resultado: Q = ${fmt(charge)} C`,
-                  `3) Energia armazenada: E = 0.5 × C × V²`,
-                  `   Substituindo: E = 0.5 × (${fmt(C)}) × (${fmt(V)})²`,
-                  `   Resultado: E = ${fmt(energy)} J`
+                  `3) Potência instantânea monitorada: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
           } else if (component.type === ComponentType.Inductor) {
-              const L = component.props.inductance || 0;
-              const didt = L !== 0 ? V / L : 0;
-              const energy = 0.5 * L * I * I;
               lines.push(
-                  `1) Tensão no indutor: V = L × dI/dt`,
-                  `   Reorganizando: dI/dt = V / L`,
-                  `   Substituindo: dI/dt = (${fmt(V)}) / (${fmt(L)})`,
-                  `   Resultado: dI/dt = ${fmt(didt)} A/s`,
-                  `2) Energia armazenada: E = 0.5 × L × I²`,
-                  `   Substituindo: E = 0.5 × (${fmt(L)}) × (${fmt(I)})²`,
-                  `   Resultado: E = ${fmt(energy)} J`,
-                  `3) Verificação de potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
+                  `1) Estado transitório calculado pela engine canônica (engine/analysis/circuitEngine.ts).`,
+                  `2) Indutância configurada: L = ${fmt(component.props.inductance || 0)} H`,
+                  `3) Potência instantânea monitorada: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
           } else if (component.type === ComponentType.Battery) {
               const sourceV = component.props.voltage || 0;
@@ -770,18 +754,12 @@ const App: React.FC = () => {
           } else if (component.type === ComponentType.Diode || component.type === ComponentType.LED) {
               const safeI = Math.abs(I) > 1e-12 ? I : 0;
               const rEq = safeI !== 0 ? V / safeI : Number.POSITIVE_INFINITY;
-              const vFromOhm = I * (Number.isFinite(rEq) ? rEq : 0);
-
               if (component.type === ComponentType.LED) {
-                  const vfNominal = component.props.voltageDrop || 2.0;
-                  const ifNominal = component.props.currentRating || 0.02;
                   lines.push(
-                      `1) Queda de tensão no LED (nó ânodo-cátodo): VLED = V(anodo) - V(catodo) = ${fmt(V)} V`,
-                      `2) Corrente no ramo do LED (KCL/KVL pela posição no circuito): ILED = ${fmt(I)} A`,
-                      `3) Lei de Ohm no ponto de operação: V = I × R_eq`,
-                      `   R_eq = V/I = (${fmt(V)})/(${fmt(I)}) = ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
-                      `   Verificação: V = I × R_eq = (${fmt(I)}) × (${Number.isFinite(rEq) ? fmt(rEq) : '∞'}) = ${fmt(vFromOhm)} V`,
-                      `4) Comparação com o LED nominal: Vf≈${fmt(vfNominal)} V em If≈${fmt(ifNominal)} A`,
+                      `1) Polarização e linearização do LED calculadas pela engine canônica (engine/analysis/circuitEngine.ts).`,
+                      `2) Queda medida no LED: ${fmt(V)} V`,
+                      `3) Corrente medida no LED: ${fmt(I)} A`,
+                      `4) Resistência equivalente no ponto de operação: ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
                       `5) Potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
                   );
               } else {
@@ -920,10 +898,10 @@ const App: React.FC = () => {
                   formula = 'V = I × R\nP = V × I';
               } else if (c.type === ComponentType.Capacitor || c.type === ComponentType.PolarizedCapacitor) {
                   props = `C = ${formatUnit(c.props.capacitance || 0, 'F')}`;
-                  formula = 'I = C × dV/dt\nE = 0.5 C V²';
+                  formula = 'Transitório via engine\nP = V × I';
               } else if (c.type === ComponentType.Inductor) {
                   props = `L = ${formatUnit(c.props.inductance || 0, 'H')}`;
-                  formula = 'V = L × dI/dt\nE = 0.5 L I²';
+                  formula = 'Transitório via engine\nP = V × I';
               } else if (c.type === ComponentType.Battery) {
                   props = `V = ${formatUnit(c.props.voltage || 0, 'V')}`;
                   formula = 'Source';
@@ -935,7 +913,7 @@ const App: React.FC = () => {
                   formula = 'Shockley Eq.';
               } else if (c.type === ComponentType.LED) {
                   props = `Vf = ${formatUnit(c.props.voltageDrop || 2, 'V')} / If = ${formatUnit(c.props.currentRating || 0.02, 'A')}`;
-                  formula = 'I = Is(e^(V/(nVt))-1)';
+                  formula = 'Modelo não linear via engine';
               }
 
               return [
