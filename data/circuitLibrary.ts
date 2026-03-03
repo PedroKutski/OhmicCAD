@@ -96,7 +96,7 @@ const genLedOn = (): CircuitData => ({
     components: [
         { id: 'V1', type: ComponentType.Battery, x: 100, y: 220, rotation: 3, state: false, props: { name: 'V1', voltage: 9 }, simData: { ...emptySim } },
         { id: 'R1', type: ComponentType.Resistor, x: 260, y: 180, rotation: 1, state: false, props: { name: 'R1', resistance: 330 }, simData: { ...emptySim } },
-        { id: 'LED1', type: ComponentType.LED, x: 260, y: 280, rotation: 1, state: false, props: { name: 'LED1', diodeType: 'led', voltageDrop: 2.2, currentRating: 0.01, maxCurrentMa: 10, saturationCurrent: 9.32e-11, ledBrightnessFactor: 1, ledFailureMode: 'saturate', ledColor: '#ff4d4d' }, simData: { ...emptySim } }
+        { id: 'LED1', type: ComponentType.LED, x: 260, y: 280, rotation: 1, state: false, props: { name: 'LED1', diodeType: 'led', voltageDrop: 2.2, currentRating: 0.01, saturationCurrent: 9.32e-11, ledColor: '#ff4d4d' }, simData: { ...emptySim } }
     ],
     wires: [
         { id: 'w1', compAId: 'V1', portAIndex: 1, compBId: 'R1', portBIndex: 0, anchor: null, path: [{x: 100, y: 180}, {x: 260, y: 140}], selected: false, simData: { ...emptySim }, props: { name: 'w1' } },

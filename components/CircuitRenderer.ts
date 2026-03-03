@@ -231,20 +231,18 @@ export const drawComponent = (
         ctx.moveTo(17, -12); ctx.lineTo(20, -12); ctx.lineTo(20, -9);
         ctx.stroke();
 
-        if (isSimulating) {
-            const intensity = Math.max(0, Math.min(1, c.simData.brightness ?? 0));
-            if (intensity > 1e-4 && !c.simData.isFailed) {
-                ctx.fillStyle = `rgba(255, 80, 80, ${0.15 + 0.45 * intensity})`;
-                ctx.shadowColor = ledColor;
-                ctx.shadowBlur = 18 * intensity;
-                ctx.beginPath();
-                ctx.moveTo(-15, -15);
-                ctx.lineTo(-15, 15);
-                ctx.lineTo(15, 0);
-                ctx.closePath();
-                ctx.fill();
-                ctx.shadowBlur = 0;
-            }
+        if (isSimulating && Math.abs(c.simData.current) > 1e-4) {
+            const intensity = Math.min(1, Math.abs(c.simData.current) / Math.max(1e-6, c.props.currentRating ?? 0.01));
+            ctx.fillStyle = `rgba(255, 80, 80, ${0.15 + 0.45 * intensity})`;
+            ctx.shadowColor = ledColor;
+            ctx.shadowBlur = 18 * intensity;
+            ctx.beginPath();
+            ctx.moveTo(-15, -15);
+            ctx.lineTo(-15, 15);
+            ctx.lineTo(15, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
         }
 
         ctx.strokeStyle = isSelected ? theme.selected : theme.componentStroke;
