@@ -19,6 +19,25 @@ View your app in AI Studio: https://ai.studio/apps/85cd801a-10b5-4948-9e13-3adfd
 3. Run the app:
    `npm run dev`
 
+## Arquitetura do Solver (módulo canônico)
+
+- A lógica física canônica do simulador está em `engine/analysis/circuitEngine.ts`.
+- Este módulo centraliza dispositivos lineares/não lineares, montagem MNA e iteração de Newton.
+- `services/Solver.ts` é apenas um adaptador de fronteira: traduz `ComponentModel/WireModel` para tipos da engine e aplica o resultado de volta ao estado da UI.
+- Regras físicas na UI devem ser evitadas. A UI deve apenas exibir valores e textos, sem reimplementar modelos elétricos.
+
+## Como adicionar novos dispositivos
+
+1. **Defina o comportamento físico na engine**
+   - Inclua o novo tipo em `solveCircuit` dentro de `engine/analysis/circuitEngine.ts`.
+   - Faça o stamping linear/não linear e atualização de estado (`componentStates`) no mesmo módulo.
+2. **Exponha os dados necessários no adaptador**
+   - Em `services/Solver.ts`, garanta o mapeamento das propriedades do novo componente para `EngineComponent.props`.
+   - Se houver novos campos de estado, mapeie ida/volta (`simData`) no adaptador.
+3. **Atualize apenas apresentação na UI**
+   - Ajuste painéis, rótulos e formulários (`PropertiesPanel`, `CircuitRenderer`, etc.) para entrada/visualização.
+   - Não duplique fórmulas físicas já existentes na engine.
+
 ## Roadmap
 
 - Melhorar a robustez e a precisão do solver elétrico.
