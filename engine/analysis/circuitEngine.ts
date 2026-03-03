@@ -46,14 +46,15 @@ export interface EngineSolveResult {
 }
 
 const linearizeLed = (vd: number, c: EngineComponent) => {
-  const V_fwdNominal = Math.max(0.8, c.props.voltageDrop || 2.0);
-  const ratedCurrent = Math.max(1e-9, c.props.currentRating || 0.02);
+  const V_fwdNominal = Math.max(0.8, c.props.voltageDrop ?? 2.2);
+  const ratedCurrent = Math.max(1e-9, c.props.currentRating ?? 0.01);
   const n = 2.0;
   const R_series = Math.max(0.5, V_fwdNominal / Math.max(1e-9, ratedCurrent * 40));
   const thermal = n * LED_VT;
   const junctionNominal = Math.max(0.1, V_fwdNominal - ratedCurrent * R_series);
   const denom = Math.exp(Math.min(80, junctionNominal / thermal)) - 1;
-  const Is = Math.max(1e-30, ratedCurrent / Math.max(1e-12, denom));
+  const inferredIs = Math.max(1e-30, ratedCurrent / Math.max(1e-12, denom));
+  const Is = Math.max(1e-30, c.props.saturationCurrent ?? inferredIs);
 
   let current = vd > 0 ? Math.max(0, (vd - V_fwdNominal) / Math.max(0.5, R_series)) : -Is;
   for (let k = 0; k < 12; k++) {
@@ -204,7 +205,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         B[u] -= I_eq;
         B[v] += I_eq;
       } else if (c.type === 'diode' || c.type === 'led') {
-        let V_fwd = c.type === 'led' ? Math.max(0.8, c.props.voltageDrop || 2.0) : 0.7;
+        let V_fwd = c.type === 'led' ? Math.max(0.8, c.props.voltageDrop ?? 2.2) : 0.7;
         if (c.props.diodeType === 'schottky') V_fwd = 0.3;
 
         const V_zener = c.props.zenerVoltage || 5.6;
@@ -331,7 +332,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
       nextState.storedCurrent = newCurrent;
       nextState.voltage = Math.abs(newVoltage);
     } else if (c.type === 'diode' || c.type === 'led') {
-      let V_fwd = c.type === 'led' ? Math.max(0.8, c.props.voltageDrop || 2.0) : 0.7;
+      let V_fwd = c.type === 'led' ? Math.max(0.8, c.props.voltageDrop ?? 2.2) : 0.7;
       if (c.props.diodeType === 'schottky') V_fwd = 0.3;
 
       const V_zener = c.props.zenerVoltage || 5.6;

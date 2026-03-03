@@ -232,7 +232,7 @@ export const drawComponent = (
         ctx.stroke();
 
         if (isSimulating && Math.abs(c.simData.current) > 1e-4) {
-            const intensity = Math.min(1, Math.abs(c.simData.current) / Math.max(1e-6, c.props.currentRating || 0.02));
+            const intensity = Math.min(1, Math.abs(c.simData.current) / Math.max(1e-6, c.props.currentRating ?? 0.01));
             ctx.fillStyle = `rgba(255, 80, 80, ${0.15 + 0.45 * intensity})`;
             ctx.shadowColor = ledColor;
             ctx.shadowBlur = 18 * intensity;
@@ -341,7 +341,7 @@ export const drawComponent = (
             if (c.props.amplitude !== undefined) valueStr += formatUnit(c.props.amplitude, 'V');
             if (c.props.frequency !== undefined) valueStr += ` ${formatUnit(c.props.frequency, 'Hz')}`;
         } else if (c.type === ComponentType.LED) {
-            valueStr = `Vf ${formatUnit(c.props.voltageDrop || 2, 'V')}`;
+            valueStr = `Vf ${formatUnit(c.props.voltageDrop ?? 2.2, 'V')}`;
         }
         
         const text = `${label}   ${valueStr}`.trim();
