@@ -111,6 +111,24 @@ export interface AppSettings {
   visualFlowSpeed: number; 
 }
 
+export type PersistedComponentState = Pick<ComponentModel, 'id' | 'type' | 'x' | 'y' | 'rotation' | 'state'> & {
+  props: Partial<ComponentProps>;
+  simData: Partial<SimData>;
+};
+
+export type PersistedWireState = Pick<WireModel, 'id' | 'compAId' | 'portAIndex' | 'compBId' | 'portBIndex' | 'anchor' | 'path' | 'selected'> & {
+  simData: Partial<SimData>;
+  props: Partial<WireModel['props']>;
+};
+
+export type PersistedSettingsState = Partial<AppSettings>;
+
+export interface CircuitPayload {
+  components: PersistedComponentState[];
+  wires: PersistedWireState[];
+  settings?: PersistedSettingsState;
+}
+
 export const GRID_SIZE = 20; 
 export const GRID_STEP = 10; 
 

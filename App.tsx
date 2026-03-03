@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   ComponentType, ComponentModel, WireModel, ViewState, 
-  Port, ComponentProps, AppSettings, THEME, GRID_STEP, Theme
+  Port, ComponentProps, AppSettings, THEME, GRID_STEP, Theme,
+  PersistedComponentState, PersistedWireState, PersistedSettingsState
 } from './types';
 import { rotatePoint, findSmartPath, distPointToSegment, findIntersection, buildOrthogonalPath } from './utils/geometry';
 import { formatUnit } from './utils/formatting';
@@ -18,15 +19,58 @@ import { CircuitLibraryModal } from './components/CircuitLibraryModal';
 const VISUAL_SPEEDS = [0, 1, 5, 10, 100, 1000, 5000, 20000];
 
 const App: React.FC = () => {
-  // ... existing loadInitialState ...
-  const loadInitialState = (key: string, def: any) => {
+  const isObjectLike = (value: unknown): value is Record<string, unknown> => (
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+  );
+
+  const hasKeys = (value: unknown, keys: string[]): value is Record<string, unknown> => (
+    isObjectLike(value) && keys.every((key) => key in value)
+  );
+
+  const isPersistedComponentState = (value: unknown): value is PersistedComponentState => (
+    hasKeys(value, ['id', 'type', 'x', 'y', 'rotation', 'state', 'props', 'simData'])
+  );
+
+  const isPersistedWireState = (value: unknown): value is PersistedWireState => (
+    hasKeys(value, ['id', 'compAId', 'portAIndex', 'compBId', 'portBIndex', 'anchor', 'path', 'selected', 'simData', 'props'])
+    && Array.isArray((value as { path?: unknown }).path)
+  );
+
+  const isPersistedSettingsState = (value: unknown): value is PersistedSettingsState => (
+    isObjectLike(value)
+  );
+
+  const loadInitialState = <T,>(key: string, def: T): T => {
     const saved = localStorage.getItem(key);
     if (!saved) return def;
+
     try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(def)) return Array.isArray(parsed) ? parsed : def;
-        return { ...def, ...parsed };
-    } catch (e) { return def; }
+      const parsed: unknown = JSON.parse(saved);
+
+      if (Array.isArray(def)) {
+        if (!Array.isArray(parsed)) return def;
+
+        if (key === 'ohmic_components') {
+          return parsed.filter(isPersistedComponentState) as T;
+        }
+
+        if (key === 'ohmic_wires') {
+          return parsed.filter(isPersistedWireState) as T;
+        }
+
+        return parsed as T;
+      }
+
+      if (!isObjectLike(def) || !isObjectLike(parsed)) return def;
+
+      if (key === 'ohmic_settings' && !isPersistedSettingsState(parsed)) {
+        return def;
+      }
+
+      return { ...def, ...parsed } as T;
+    } catch {
+      return def;
+    }
   };
 
   const [components, setComponents] = useState<ComponentModel[]>(() => loadInitialState('ohmic_components', []));
@@ -1010,7 +1054,7 @@ const App: React.FC = () => {
       }
   };
 
-  const handleLoadCircuit = (id: string, data?: any, usageHint?: string) => {
+  const handleLoadCircuit = (id: string, data?: () => { components: ComponentModel[]; wires: WireModel[] }, usageHint?: string) => {
       if (data) {
           const circuit = data(); // Assuming data is a generator function
           updateStateWithHistory(circuit.components, circuit.wires);

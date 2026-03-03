@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { 
   ComponentModel, WireModel, ViewState, ComponentType, 
-  THEME, GRID_SIZE, GRID_STEP, Port, AppSettings, SimData
+  THEME, GRID_SIZE, GRID_STEP, Port, AppSettings, SimData, Theme
 } from '../types';
 import { findSmartPath, buildOrthogonalPath } from '../utils/geometry';
 import { formatUnit } from '../utils/formatting';
@@ -37,7 +37,7 @@ interface CircuitCanvasProps {
 
 export interface CircuitCanvasHandle {
   exportImage: () => string | null;
-  exportSchematic: (theme: any) => string | null;
+  exportSchematic: (theme: Theme) => string | null;
 }
 
 export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>(({
@@ -81,7 +81,7 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
 
   useImperativeHandle(ref, () => ({
     exportImage: () => canvasRef.current?.toDataURL('image/png') || null,
-    exportSchematic: (theme: any) => {
+    exportSchematic: (theme: Theme) => {
         // Create a temporary canvas to render the schematic with the given theme
         const tempCanvas = document.createElement('canvas');
         // Calculate bounds
