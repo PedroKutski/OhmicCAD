@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { ComponentModel, WireModel, ComponentType } from '../types';
+import { ComponentModel, WireModel, ComponentType, ComponentProps } from '../types';
 
 interface PropertiesPanelProps {
   target: ComponentModel | WireModel | undefined;
-  onUpdateCompProps: (id: string, props: any) => void;
-  onUpdateWireProps: (id: string, props: any) => void;
+  onUpdateCompProps: (id: string, props: Partial<ComponentProps>) => void;
+  onUpdateWireProps: (id: string, props: Partial<WireModel['props']>) => void;
 }
 
 const RESISTOR_COLORS = [
@@ -338,7 +338,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
          <div className="space-y-4">
             {Object.keys(comp.props).map(key => {
                 if (comp.type === ComponentType.Battery && key === 'capacity') return null;
-                return renderGenericInput(key, (comp.props as any)[key], (val) => onUpdateCompProps(comp.id, { [key]: val }));
+                return renderGenericInput(key, comp.props[key as keyof ComponentProps], (val) => onUpdateCompProps(comp.id, { [key]: val }));
             })}
          </div>
      );
