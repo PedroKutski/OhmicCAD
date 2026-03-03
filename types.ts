@@ -64,6 +64,7 @@ export interface ComponentProps {
   maxCurrent?: number; 
   saturationCurrent?: number; // Saturation current for diode/LED Shockley model (A)
   maxCurrentMa?: number; // LED maximum admissible current in mA
+  maxVoltage?: number; // LED maximum admissible voltage before failure (V)
   ledBrightnessFactor?: number; // LED luminous factor (multiplier for I/If_max)
   ledFailureMode?: 'saturate' | 'burn_open';
 }

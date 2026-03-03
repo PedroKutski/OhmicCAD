@@ -51,6 +51,7 @@ export interface EngineSolveResult {
 type LedModelParams = {
   vf: number;
   ifMax: number;
+  maxVoltage: number;
   failureMode: 'saturate' | 'burn_open';
   brightnessFactor: number;
   hasFailed: boolean;
@@ -58,8 +59,9 @@ type LedModelParams = {
 };
 
 const getLedModelParams = (c: EngineComponent): LedModelParams => {
-  const vf = Math.max(0.8, c.props.voltageDrop ?? 1.73);
+  const vf = 1.8;
   const ifMax = Math.max(1e-9, c.props.currentRating ?? ((c.props.maxCurrentMa ?? 20) / 1000));
+  const maxVoltage = Math.max(0.1, c.props.maxVoltage ?? c.props.voltageDrop ?? 2.2);
   const failureMode: 'saturate' | 'burn_open' = c.props.ledFailureMode === 'burn_open' ? 'burn_open' : 'saturate';
   const brightnessFactor = Math.max(0, c.props.ledBrightnessFactor ?? 1);
 
@@ -71,6 +73,7 @@ const getLedModelParams = (c: EngineComponent): LedModelParams => {
   return {
     vf,
     ifMax,
+    maxVoltage,
     failureMode,
     brightnessFactor,
     hasFailed: Boolean(c.simData.isFailed),
@@ -80,20 +83,21 @@ const getLedModelParams = (c: EngineComponent): LedModelParams => {
 
 const linearizeLed = (vd: number, c: EngineComponent) => {
   const params = getLedModelParams(c);
+  const overVoltage = vd > params.maxVoltage;
 
-  if (params.failureMode === 'burn_open' && params.hasFailed) {
-    return { G: LED_OFF_G, I_eq: 0, current: vd * LED_OFF_G, ...params };
+  if (params.hasFailed || overVoltage) {
+    return { G: LED_OFF_G, I_eq: 0, current: vd * LED_OFF_G, overVoltage, ...params };
   }
 
   if (vd <= params.vf) {
-    return { G: LED_OFF_G, I_eq: 0, current: 0, ...params };
+    return { G: LED_OFF_G, I_eq: 0, current: 0, overVoltage, ...params };
   }
 
   const G = 1 / params.dynamicResistance;
   const I_eq = -(params.vf / params.dynamicResistance);
   const current = (vd - params.vf) / params.dynamicResistance;
 
-  return { G, I_eq, current, ...params };
+  return { G, I_eq, current, overVoltage, ...params };
 };
 
 const buildPortToNetMap = (components: EngineComponent[], wires: EngineWire[]): Map<string, number> => {
@@ -221,7 +225,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         B[u] -= I_eq;
         B[v] += I_eq;
       } else if (c.type === 'diode' || c.type === 'led') {
-        let V_fwd = c.type === 'led' ? Math.max(0.8, c.props.voltageDrop ?? 1.73) : 0.7;
+        let V_fwd = c.type === 'led' ? 1.8 : 0.7;
         if (c.props.diodeType === 'schottky') V_fwd = 0.3;
 
         const V_zener = c.props.zenerVoltage || 5.6;
@@ -344,7 +348,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
       nextState.storedCurrent = newCurrent;
       nextState.voltage = Math.abs(newVoltage);
     } else if (c.type === 'diode' || c.type === 'led') {
-      let V_fwd = c.type === 'led' ? Math.max(0.8, c.props.voltageDrop ?? 1.73) : 0.7;
+      let V_fwd = c.type === 'led' ? 1.8 : 0.7;
       if (c.props.diodeType === 'schottky') V_fwd = 0.3;
 
       const V_zener = c.props.zenerVoltage || 5.6;
@@ -355,7 +359,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         const led = linearizeLed(newVoltage, c);
         newCurrent = led.current;
 
-        const hasFailed = led.failureMode === 'burn_open' && (c.simData.isFailed || Math.abs(newCurrent) > led.ifMax);
+        const hasFailed = c.simData.isFailed || led.overVoltage || (led.failureMode === 'burn_open' && Math.abs(newCurrent) > led.ifMax);
         nextState.isFailed = Boolean(hasFailed);
         const luminousCurrent = Math.max(0, Math.abs(newCurrent) - LED_EMISSION_EPSILON);
         const normalized = Math.min(1, luminousCurrent / led.ifMax);
