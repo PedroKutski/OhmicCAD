@@ -54,8 +54,7 @@ type LedModelParams = {
   failureMode: 'saturate' | 'burn_open';
   brightnessFactor: number;
   hasFailed: boolean;
-  is: number;
-  nVt: number;
+  dynamicResistance: number;
 };
 
 const getLedModelParams = (c: EngineComponent): LedModelParams => {
@@ -63,13 +62,11 @@ const getLedModelParams = (c: EngineComponent): LedModelParams => {
   const ifMax = Math.max(1e-9, c.props.currentRating ?? ((c.props.maxCurrentMa ?? 20) / 1000));
   const failureMode: 'saturate' | 'burn_open' = c.props.ledFailureMode === 'burn_open' ? 'burn_open' : 'saturate';
   const brightnessFactor = Math.max(0, c.props.ledBrightnessFactor ?? 1);
-  const nominalForwardCurrent = Math.max(1e-9, c.props.currentRating ?? ifMax);
-  const nVt = 0.052;
-  const rawIs = c.props.saturationCurrent ?? (nominalForwardCurrent / Math.max(Math.exp(vf / nVt) - 1, 1e-9));
-  const is = Math.max(1e-18, rawIs);
 
-  // LED modelado com Shockley: I = Is*(exp(Vd/(nVt)) - 1).
-  // Isso faz a tensão e a corrente do LED surgirem do circuito desenhado.
+  // LED with controlled forward drop (quase ideal):
+  // abaixo de Vf, I≈0; acima de Vf, a corrente é definida pelo circuito externo.
+  // Mantemos apenas uma resistência dinâmica muito pequena para estabilidade numérica do MNA/Newton.
+  const dynamicResistance = 1e-3;
 
   return {
     vf,
@@ -77,8 +74,7 @@ const getLedModelParams = (c: EngineComponent): LedModelParams => {
     failureMode,
     brightnessFactor,
     hasFailed: Boolean(c.simData.isFailed),
-    is,
-    nVt,
+    dynamicResistance,
   };
 };
 
@@ -89,11 +85,13 @@ const linearizeLed = (vd: number, c: EngineComponent) => {
     return { G: LED_OFF_G, I_eq: 0, current: vd * LED_OFF_G, ...params };
   }
 
-  const clampedExpArg = Math.max(-50, Math.min(40, vd / params.nVt));
-  const expV = Math.exp(clampedExpArg);
-  const current = params.is * (expV - 1);
-  const G = Math.max(LED_OFF_G, (params.is / params.nVt) * expV);
-  const I_eq = current - G * vd;
+  if (vd <= params.vf) {
+    return { G: LED_OFF_G, I_eq: 0, current: 0, ...params };
+  }
+
+  const G = 1 / params.dynamicResistance;
+  const I_eq = -(params.vf / params.dynamicResistance);
+  const current = (vd - params.vf) / params.dynamicResistance;
 
   return { G, I_eq, current, ...params };
 };
@@ -388,6 +386,11 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
 
     if (c.type !== 'capacitor' && c.type !== 'capacitor_pol' && c.type !== 'inductor') {
       let voltage = c.type === 'ac_source' ? newVoltage : Math.abs(newVoltage);
+      if (c.type === 'led') {
+        const vf = Math.max(0.8, c.props.voltageDrop ?? 1.73);
+        const isConducting = Math.abs(newCurrent) > 1e-9 && !nextState.isFailed;
+        voltage = isConducting ? vf : Math.max(0, voltage);
+      }
       if (voltage < 1e-6) voltage = 0;
       nextState.voltage = voltage;
     }
