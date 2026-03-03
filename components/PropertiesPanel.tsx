@@ -388,8 +388,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
                   <input
                       type="number"
                       min={0.8}
-                      step={0.1}
-                      value={comp.props.voltageDrop || 2.0}
+                      step={0.001}
+                      value={comp.props.voltageDrop ?? 2.228}
                       onChange={(e) => onUpdateCompProps(comp.id, { voltageDrop: parseFloat(e.target.value) })}
                       className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
                   />
@@ -400,8 +400,19 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
                       type="number"
                       min={0.001}
                       step={0.001}
-                      value={comp.props.currentRating || 0.02}
+                      value={comp.props.currentRating ?? 0.01}
                       onChange={(e) => onUpdateCompProps(comp.id, { currentRating: parseFloat(e.target.value) })}
+                      className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
+                  />
+              </div>
+              <div>
+                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Saturation Current (A)</label>
+                  <input
+                      type="number"
+                      min={1e-12}
+                      step={1e-11}
+                      value={comp.props.saturationCurrent ?? 9.32e-11}
+                      onChange={(e) => onUpdateCompProps(comp.id, { saturationCurrent: parseFloat(e.target.value) })}
                       className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
                   />
               </div>

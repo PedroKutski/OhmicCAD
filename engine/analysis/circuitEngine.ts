@@ -5,7 +5,6 @@ const R_CLOSED_SWITCH = 0.001;
 const R_OPEN_SWITCH = 1e13;
 const MAX_ITERATIONS = 50;
 const NEWTON_TOLERANCE = 1e-9;
-const LED_VT = 0.02585;
 
 export interface EngineSimData {
   voltage: number;
@@ -45,38 +44,14 @@ export interface EngineSolveResult {
   wireStates?: Record<string, Partial<EngineSimData>>;
 }
 
-const linearizeLed = (vd: number, c: EngineComponent) => {
-  const V_fwdNominal = Math.max(0.8, c.props.voltageDrop || 2.0);
-  const ratedCurrent = Math.max(1e-9, c.props.currentRating || 0.02);
-  const n = 2.0;
-  const R_series = Math.max(0.5, V_fwdNominal / Math.max(1e-9, ratedCurrent * 40));
-  const thermal = n * LED_VT;
-  const junctionNominal = Math.max(0.1, V_fwdNominal - ratedCurrent * R_series);
-  const denom = Math.exp(Math.min(80, junctionNominal / thermal)) - 1;
-  const Is = Math.max(1e-30, ratedCurrent / Math.max(1e-12, denom));
+const getLedLinearModel = (c: EngineComponent) => {
+  const forwardVoltage = Math.max(0.8, c.props.voltageDrop ?? 2.228);
+  const ratedCurrent = Math.max(1e-9, c.props.currentRating ?? 0.01);
+  const saturationCurrent = Math.max(1e-12, c.props.saturationCurrent ?? 9.32e-11);
+  const dynamicResistance = Math.max(1e-3, 0.1 / ratedCurrent);
+  const offConductance = Math.max(1e-12, saturationCurrent / forwardVoltage);
 
-  let current = vd > 0 ? Math.max(0, (vd - V_fwdNominal) / Math.max(0.5, R_series)) : -Is;
-  for (let k = 0; k < 12; k++) {
-    const junctionVoltage = vd - current * R_series;
-    const exponent = Math.min(80, Math.max(-40, junctionVoltage / thermal));
-    const expTerm = Math.exp(exponent);
-    const shockleyCurrent = Is * (expTerm - 1);
-    const residual = current - shockleyCurrent;
-    const derivative = 1 + (Is * expTerm * R_series) / thermal;
-    const step = residual / Math.max(1e-12, derivative);
-    current -= step;
-    if (Math.abs(step) < 1e-12) break;
-  }
-
-  const junctionVoltage = vd - current * R_series;
-  const exponent = Math.min(80, Math.max(-40, junctionVoltage / thermal));
-  const expTerm = Math.exp(exponent);
-  const gd = (Is * expTerm) / thermal;
-
-  const G = Math.max(1e-10, gd / (1 + gd * R_series));
-  const I_eq = current - G * vd;
-
-  return { G, I_eq, current };
+  return { forwardVoltage, saturationCurrent, dynamicResistance, offConductance };
 };
 
 const buildPortToNetMap = (components: EngineComponent[], wires: EngineWire[]): Map<string, number> => {
@@ -204,7 +179,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         B[u] -= I_eq;
         B[v] += I_eq;
       } else if (c.type === 'diode' || c.type === 'led') {
-        let V_fwd = c.type === 'led' ? Math.max(0.8, c.props.voltageDrop || 2.0) : 0.7;
+        let V_fwd = c.type === 'led' ? Math.max(0.8, c.props.voltageDrop ?? 2.228) : 0.7;
         if (c.props.diodeType === 'schottky') V_fwd = 0.3;
 
         const V_zener = c.props.zenerVoltage || 5.6;
@@ -213,12 +188,18 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         const Vd = iter > 0 ? (sol[u] - sol[v]) : 0;
 
         if (c.type === 'led') {
-          if (Vd > 0) {
-            const { G, I_eq } = linearizeLed(Vd, c);
+          const { forwardVoltage, saturationCurrent, dynamicResistance, offConductance } = getLedLinearModel(c);
+          if (Vd > forwardVoltage) {
+            const G = 1 / dynamicResistance;
+            const I_eq = -forwardVoltage / dynamicResistance;
             stampG(u, v, G);
-            B[u] -= I_eq; B[v] += I_eq;
+            B[u] -= I_eq;
+            B[v] += I_eq;
           } else {
-            stampG(u, v, G_off);
+            stampG(u, v, offConductance);
+            const I_eq = -saturationCurrent;
+            B[u] -= I_eq;
+            B[v] += I_eq;
           }
         } else if (Vd > V_fwd) {
           const G = 1 / R_on;
@@ -331,7 +312,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
       nextState.storedCurrent = newCurrent;
       nextState.voltage = Math.abs(newVoltage);
     } else if (c.type === 'diode' || c.type === 'led') {
-      let V_fwd = c.type === 'led' ? Math.max(0.8, c.props.voltageDrop || 2.0) : 0.7;
+      let V_fwd = c.type === 'led' ? Math.max(0.8, c.props.voltageDrop ?? 2.228) : 0.7;
       if (c.props.diodeType === 'schottky') V_fwd = 0.3;
 
       const V_zener = c.props.zenerVoltage || 5.6;
@@ -339,7 +320,10 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
       const G_off = 1e-10;
 
       if (c.type === 'led') {
-        newCurrent = newVoltage > 0 ? linearizeLed(newVoltage, c).current : newVoltage * G_off;
+        const { forwardVoltage, saturationCurrent, dynamicResistance, offConductance } = getLedLinearModel(c);
+        newCurrent = newVoltage > forwardVoltage
+          ? (newVoltage - forwardVoltage) / dynamicResistance
+          : (newVoltage * offConductance - saturationCurrent);
       } else if (newVoltage > V_fwd) {
         newCurrent = (newVoltage - V_fwd) / R_on;
       } else if (c.props.diodeType === 'zener' && newVoltage < -V_zener) {
