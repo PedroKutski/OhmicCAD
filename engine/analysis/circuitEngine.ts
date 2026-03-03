@@ -285,6 +285,16 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
   }
 
   const componentStates: Record<string, Partial<EngineSimData>> = {};
+  const portCurrents = new Map<string, number>();
+  const portWireDegree = new Map<string, number>();
+
+  wires.forEach(w => {
+    const portA = `${w.compAId}_${w.portAIndex}`;
+    const portB = `${w.compBId}_${w.portBIndex}`;
+    portWireDegree.set(portA, (portWireDegree.get(portA) || 0) + 1);
+    portWireDegree.set(portB, (portWireDegree.get(portB) || 0) + 1);
+  });
+
   components.forEach(c => {
     if (c.type === 'junction') return;
     const u = portToNet.get(`${c.id}_0`)!;
@@ -378,6 +388,17 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
     nextState.iRms = Math.sqrt(nextState._iSqSum);
 
     componentStates[c.id] = nextState;
+
+    const smoothedCurrentValue = nextState.current ?? 0;
+    const port0 = `${c.id}_0`;
+    const port1 = `${c.id}_1`;
+
+    // Positive component current is defined from port 0 -> port 1.
+    // Track current leaving each port to estimate ideal-wire current display.
+    portCurrents.set(port0, (portCurrents.get(port0) || 0) - smoothedCurrentValue);
+    if (c.type !== 'junction') {
+      portCurrents.set(port1, (portCurrents.get(port1) || 0) + smoothedCurrentValue);
+    }
   });
 
   const wireStates: Record<string, Partial<EngineSimData>> = {};
@@ -386,9 +407,16 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
     const v = portToNet.get(`${w.compBId}_${w.portBIndex}`);
     if (u === undefined || v === undefined) return;
 
-    const alpha = 0.2;
+    const alpha = 0.4;
     const wireVoltage = Math.abs(sol[u] - sol[v]);
-    const wireCurrent = w.simData.current * (1 - alpha);
+    const portA = `${w.compAId}_${w.portAIndex}`;
+    const portB = `${w.compBId}_${w.portBIndex}`;
+    const degreeA = Math.max(1, portWireDegree.get(portA) || 1);
+    const degreeB = Math.max(1, portWireDegree.get(portB) || 1);
+    const estimateFromA = (portCurrents.get(portA) || 0) / degreeA;
+    const estimateFromB = -(portCurrents.get(portB) || 0) / degreeB;
+    const estimatedWireCurrent = (estimateFromA + estimateFromB) / 2;
+    const wireCurrent = w.simData.current * (1 - alpha) + estimatedWireCurrent * alpha;
 
     wireStates[w.id] = {
       voltage: wireVoltage,
