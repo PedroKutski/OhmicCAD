@@ -354,12 +354,13 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
       if (c.type === 'led') {
         const led = linearizeLed(newVoltage, c);
         newCurrent = led.current;
+        const forwardCurrent = Math.max(0, newCurrent);
 
         const overVoltage = newVoltage > led.maxVoltage;
-        const overCurrent = Math.abs(newCurrent) > led.ifMax;
+        const overCurrent = forwardCurrent > led.ifMax;
         const hasFailed = c.simData.isFailed || overVoltage || (led.failureMode === 'burn_open' && overCurrent);
         nextState.isFailed = Boolean(hasFailed);
-        const luminousCurrent = Math.max(0, Math.abs(newCurrent) - LED_EMISSION_EPSILON);
+        const luminousCurrent = Math.max(0, forwardCurrent - LED_EMISSION_EPSILON);
         const normalized = Math.min(1, luminousCurrent / led.ifMax);
         nextState.brightness = hasFailed ? 0 : Math.max(0, normalized * led.brightnessFactor);
       } else if (newVoltage > V_fwd) {
@@ -389,9 +390,9 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
     if (c.type !== 'capacitor' && c.type !== 'capacitor_pol' && c.type !== 'inductor') {
       let voltage = c.type === 'ac_source' ? newVoltage : Math.abs(newVoltage);
       if (c.type === 'led') {
-        // Exibe sempre a tensão realmente calculada no LED (não fixa em Vf),
-        // para refletir o valor que chega ao componente dentro do circuito desenhado.
-        voltage = Math.max(0, voltage);
+        // Exibe a polaridade calculada no LED para refletir corretamente
+        // tanto a condução direta quanto a polarização reversa.
+        voltage = newVoltage;
       }
       if (voltage < 1e-6) voltage = 0;
       nextState.voltage = voltage;
