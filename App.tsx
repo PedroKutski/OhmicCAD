@@ -83,6 +83,7 @@ const App: React.FC = () => {
       showGrid: true,
       showLabels: true,
       showCurrent: true,
+      showDirectionArrows: true,
       currentFlowMode: 'conventional',
       smoothWires: false,
       timeStepMultiplier: 1.0,
@@ -1236,6 +1237,10 @@ const App: React.FC = () => {
                      <label className="flex items-center justify-between text-zinc-400 text-sm cursor-pointer hover:text-white">
                         <span>Show Current</span>
                         <input type="checkbox" checked={appSettings.showCurrent} onChange={e => setAppSettings(p => ({...p, showCurrent: e.target.checked}))} className="accent-orange-500" />
+                     </label>
+                     <label className="flex items-center justify-between text-zinc-400 text-sm cursor-pointer hover:text-white">
+                        <span>Direction Arrows</span>
+                        <input type="checkbox" checked={!!appSettings.showDirectionArrows} onChange={e => setAppSettings(p => ({...p, showDirectionArrows: e.target.checked}))} className="accent-orange-500" />
                      </label>
                      <label className="flex items-center justify-between text-zinc-400 text-sm cursor-pointer hover:text-white gap-3">
                         <span>Current Mode</span>
