@@ -1,6 +1,37 @@
 import { ComponentModel, WireModel, ComponentType, Theme, AppSettings } from '../types';
 import { formatUnit } from '../utils/formatting';
 
+const drawDirectionArrow = (
+    ctx: CanvasRenderingContext2D,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    color: string
+) => {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) return;
+
+    const ux = dx / len;
+    const uy = dy / len;
+    const size = 8;
+    const width = 4.5;
+
+    const tip = to;
+    const baseX = tip.x - ux * size;
+    const baseY = tip.y - uy * size;
+
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(baseX + -uy * width, baseY + ux * width);
+    ctx.lineTo(baseX - -uy * width, baseY - ux * width);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+};
+
 export const drawComponent = (
   ctx: CanvasRenderingContext2D, 
   c: ComponentModel, 
@@ -483,6 +514,39 @@ export const drawWire = (
             }
 
             accumulatedLen += segLen;
+        }
+    }
+
+    if (isSimulating && appSettings.showCurrent && !!appSettings.showDirectionArrows && Math.abs(w.simData.current) > 1e-6) {
+        const baseDirection = Math.sign(w.simData.current);
+        const flowModeSign = appSettings.currentFlowMode === 'conventional' ? -1 : 1;
+        const currentDir = baseDirection * flowModeSign;
+
+        const arrowSpacing = 90;
+        let remaining = arrowSpacing / 2;
+
+        for (let i = 0; i < w.path.length - 1; i++) {
+            const p1 = w.path[i];
+            const p2 = w.path[i + 1];
+            const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            if (segLen < 1e-6) continue;
+
+            while (remaining <= segLen) {
+                const t = remaining / segLen;
+                const cx = p1.x + (p2.x - p1.x) * t;
+                const cy = p1.y + (p2.y - p1.y) * t;
+                const half = 7;
+
+                if (currentDir > 0) {
+                    drawDirectionArrow(ctx, { x: cx - ((p2.x - p1.x) / segLen) * half, y: cy - ((p2.y - p1.y) / segLen) * half }, { x: cx + ((p2.x - p1.x) / segLen) * half, y: cy + ((p2.y - p1.y) / segLen) * half }, '#ff4d4d');
+                } else {
+                    drawDirectionArrow(ctx, { x: cx + ((p2.x - p1.x) / segLen) * half, y: cy + ((p2.y - p1.y) / segLen) * half }, { x: cx - ((p2.x - p1.x) / segLen) * half, y: cy - ((p2.y - p1.y) / segLen) * half }, '#ff4d4d');
+                }
+
+                remaining += arrowSpacing;
+            }
+
+            remaining -= segLen;
         }
     }
 };

@@ -105,6 +105,7 @@ export interface AppSettings {
   showGrid: boolean;
   showLabels: boolean;
   showCurrent: boolean;
+  showDirectionArrows: boolean;
   currentFlowMode: 'conventional' | 'real';
   smoothWires: boolean;
   timeStepMultiplier: number; 
