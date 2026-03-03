@@ -54,7 +54,9 @@ type LedModelParams = {
   failureMode: 'saturate' | 'burn_open';
   brightnessFactor: number;
   hasFailed: boolean;
-  dynamicResistance: number;
+  thermalVoltage: number;
+  emissionCoefficient: number;
+  saturationCurrent: number;
 };
 
 const getLedModelParams = (c: EngineComponent): LedModelParams => {
@@ -62,11 +64,17 @@ const getLedModelParams = (c: EngineComponent): LedModelParams => {
   const ifMax = Math.max(1e-9, c.props.currentRating ?? ((c.props.maxCurrentMa ?? 20) / 1000));
   const failureMode: 'saturate' | 'burn_open' = c.props.ledFailureMode === 'burn_open' ? 'burn_open' : 'saturate';
   const brightnessFactor = Math.max(0, c.props.ledBrightnessFactor ?? 1);
+  const thermalVoltage = 0.02585;
+  const emissionCoefficient = Math.max(1, c.props.emissionCoefficient ?? 2);
+  const referenceCurrent = Math.max(1e-9, c.props.currentRating ?? 0.01);
+  const denom = thermalVoltage * emissionCoefficient;
 
-  // LED with controlled forward drop (quase ideal):
-  // abaixo de Vf, I≈0; acima de Vf, a corrente é definida pelo circuito externo.
-  // Mantemos apenas uma resistência dinâmica muito pequena para estabilidade numérica do MNA/Newton.
-  const dynamicResistance = 1e-3;
+  // Ajusta Is para que o LED passe próximo do ponto nominal (Vf, Iref)
+  // e mantenha uma curva I-V contínua (não fixa em Vf).
+  const saturationCurrent = Math.max(
+    1e-30,
+    referenceCurrent / Math.max(1e-12, Math.expm1(vf / denom))
+  );
 
   return {
     vf,
@@ -74,7 +82,9 @@ const getLedModelParams = (c: EngineComponent): LedModelParams => {
     failureMode,
     brightnessFactor,
     hasFailed: Boolean(c.simData.isFailed),
-    dynamicResistance,
+    thermalVoltage,
+    emissionCoefficient,
+    saturationCurrent,
   };
 };
 
@@ -85,13 +95,14 @@ const linearizeLed = (vd: number, c: EngineComponent) => {
     return { G: LED_OFF_G, I_eq: 0, current: vd * LED_OFF_G, ...params };
   }
 
-  if (vd <= params.vf) {
-    return { G: LED_OFF_G, I_eq: 0, current: 0, ...params };
-  }
-
-  const G = 1 / params.dynamicResistance;
-  const I_eq = -(params.vf / params.dynamicResistance);
-  const current = (vd - params.vf) / params.dynamicResistance;
+  const vdLimited = Math.max(-5, Math.min(5, vd));
+  const denom = params.thermalVoltage * params.emissionCoefficient;
+  const expTerm = Math.exp(vdLimited / denom);
+  const currentShockley = params.saturationCurrent * (expTerm - 1);
+  const gShockley = (params.saturationCurrent / denom) * expTerm;
+  const G = Math.max(LED_OFF_G, gShockley + LED_OFF_G);
+  const current = currentShockley;
+  const I_eq = current - G * vd;
 
   return { G, I_eq, current, ...params };
 };
@@ -357,7 +368,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
 
         const hasFailed = led.failureMode === 'burn_open' && (c.simData.isFailed || Math.abs(newCurrent) > led.ifMax);
         nextState.isFailed = Boolean(hasFailed);
-        const luminousCurrent = Math.max(0, Math.abs(newCurrent) - LED_EMISSION_EPSILON);
+        const luminousCurrent = Math.max(0, newCurrent - LED_EMISSION_EPSILON);
         const normalized = Math.min(1, luminousCurrent / led.ifMax);
         nextState.brightness = hasFailed ? 0 : Math.max(0, normalized * led.brightnessFactor);
       } else if (newVoltage > V_fwd) {
@@ -385,13 +396,10 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
     nextState.current = smoothedCurrent;
 
     if (c.type !== 'capacitor' && c.type !== 'capacitor_pol' && c.type !== 'inductor') {
-      let voltage = c.type === 'ac_source' ? newVoltage : Math.abs(newVoltage);
-      if (c.type === 'led') {
-        const vf = Math.max(0.8, c.props.voltageDrop ?? 1.73);
-        const isConducting = Math.abs(newCurrent) > 1e-9 && !nextState.isFailed;
-        voltage = isConducting ? vf : Math.max(0, voltage);
-      }
-      if (voltage < 1e-6) voltage = 0;
+      // LED voltage should come directly from the solved node voltages,
+      // not from an absolute-value post-processing.
+      let voltage = c.type === 'led' || c.type === 'ac_source' ? newVoltage : Math.abs(newVoltage);
+      if (Math.abs(voltage) < 1e-6) voltage = 0;
       nextState.voltage = voltage;
     }
 
