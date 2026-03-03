@@ -352,7 +352,7 @@ const App: React.FC = () => {
     else if (type === ComponentType.Inductor) { newComp.props.inductance = 100e-3; }
     else if (type === ComponentType.ACSource) { newComp.props.amplitude = 20; newComp.props.frequency = 60; }
     else if (type === ComponentType.Diode) { newComp.props.diodeType = 'rectifier'; }
-    else if (type === ComponentType.LED) { newComp.props.diodeType = 'led'; newComp.props.voltageDrop = 2.2; newComp.props.currentRating = 0.01; newComp.props.saturationCurrent = 9.32e-11; newComp.props.ledColor = '#ff4d4d'; }
+    else if (type === ComponentType.LED) { newComp.props.diodeType = 'led'; newComp.props.voltageDrop = 1.73; newComp.props.currentRating = 0.01; newComp.props.maxCurrentMa = 10; newComp.props.ledBrightnessFactor = 1; newComp.props.ledFailureMode = 'saturate'; newComp.props.ledColor = '#ff4d4d'; }
     else if (type === ComponentType.Lamp) { newComp.props.color = '#ffffaa'; newComp.props.resistance = 100; }
 
     let nextWires = [...wires];
@@ -957,7 +957,7 @@ const App: React.FC = () => {
                   props = c.props.diodeType || 'Rectifier';
                   formula = 'Shockley Eq.';
               } else if (c.type === ComponentType.LED) {
-                  props = `Vf = ${formatUnit(c.props.voltageDrop ?? 2.2, 'V')} / If = ${formatUnit(c.props.currentRating ?? 0.01, 'A')}`;
+                  props = `Vf = ${formatUnit(c.props.voltageDrop ?? 1.73, 'V')} / If = ${formatUnit(c.props.currentRating ?? 0.01, 'A')}`;
                   formula = 'Modelo não linear via engine';
               }
 
