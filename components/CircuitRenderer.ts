@@ -540,9 +540,9 @@ export const drawWire = (
                 const half = 7;
 
                 if (currentDir > 0) {
-                    drawDirectionArrow(ctx, { x: cx - ((p2.x - p1.x) / segLen) * half, y: cy - ((p2.y - p1.y) / segLen) * half }, { x: cx + ((p2.x - p1.x) / segLen) * half, y: cy + ((p2.y - p1.y) / segLen) * half }, '#ff4d4d');
-                } else {
                     drawDirectionArrow(ctx, { x: cx + ((p2.x - p1.x) / segLen) * half, y: cy + ((p2.y - p1.y) / segLen) * half }, { x: cx - ((p2.x - p1.x) / segLen) * half, y: cy - ((p2.y - p1.y) / segLen) * half }, '#ff4d4d');
+                } else {
+                    drawDirectionArrow(ctx, { x: cx - ((p2.x - p1.x) / segLen) * half, y: cy - ((p2.y - p1.y) / segLen) * half }, { x: cx + ((p2.x - p1.x) / segLen) * half, y: cy + ((p2.y - p1.y) / segLen) * half }, '#ff4d4d');
                 }
 
                 remaining += arrowSpacing;
