@@ -352,7 +352,7 @@ const App: React.FC = () => {
     else if (type === ComponentType.Inductor) { newComp.props.inductance = 100e-3; }
     else if (type === ComponentType.ACSource) { newComp.props.amplitude = 20; newComp.props.frequency = 60; }
     else if (type === ComponentType.Diode) { newComp.props.diodeType = 'rectifier'; }
-    else if (type === ComponentType.LED) { newComp.props.diodeType = 'led'; newComp.props.maxVoltage = 2.2; newComp.props.currentRating = 0.01; newComp.props.maxCurrentMa = 10; newComp.props.ledBrightnessFactor = 1; newComp.props.ledFailureMode = 'saturate'; newComp.props.ledColor = '#ff4d4d'; }
+    else if (type === ComponentType.LED) { newComp.props.diodeType = 'led'; newComp.props.voltageDrop = 1.73; newComp.props.currentRating = 0.01; newComp.props.maxCurrentMa = 10; newComp.props.ledBrightnessFactor = 1; newComp.props.ledFailureMode = 'saturate'; newComp.props.ledColor = '#ff4d4d'; }
     else if (type === ComponentType.Lamp) { newComp.props.color = '#ffffaa'; newComp.props.resistance = 100; }
 
     let nextWires = [...wires];

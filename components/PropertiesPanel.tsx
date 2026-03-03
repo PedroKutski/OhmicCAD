@@ -384,13 +384,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
       return (
           <div className="space-y-4">
               <div>
-                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Max Voltage (V)</label>
+                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Forward Voltage (V)</label>
                   <input
                       type="number"
-                      min={0.1}
+                      min={0.8}
                       step={0.1}
-                      value={comp.props.maxVoltage ?? comp.props.voltageDrop ?? 2.2}
-                      onChange={(e) => onUpdateCompProps(comp.id, { maxVoltage: parseFloat(e.target.value) })}
+                      value={comp.props.voltageDrop ?? 1.73}
+                      onChange={(e) => onUpdateCompProps(comp.id, { voltageDrop: parseFloat(e.target.value) })}
                       className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
                   />
               </div>
