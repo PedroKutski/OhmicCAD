@@ -18,8 +18,6 @@ export interface SimData {
   voltage: number;
   current: number;
   power: number;
-  brightness?: number;
-  isFailed?: boolean;
   resistance?: number;
   eField: number;
   bField: number;
@@ -63,9 +61,6 @@ export interface ComponentProps {
   tolerance?: number;
   maxCurrent?: number; 
   saturationCurrent?: number; // Saturation current for diode/LED Shockley model (A)
-  maxCurrentMa?: number; // LED maximum admissible current in mA
-  ledBrightnessFactor?: number; // LED luminous factor (multiplier for I/If_max)
-  ledFailureMode?: 'saturate' | 'burn_open';
 }
 
 export interface Port {
