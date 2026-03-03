@@ -279,8 +279,9 @@ export const drawComponent = (
         // Component current sign from solver follows port orientation (0 -> 1).
         // Conventional flow in the symbol is rendered opposite to that sign.
         const baseDirection = -Math.sign(c.simData.current);
-        // Conventional follows positive current sign; electron flow is opposite.
-        const flowModeSign = appSettings.currentFlowMode === 'conventional' ? 1 : -1;
+        // Solver sign is aligned with electron flow in this visualization pipeline.
+        // So conventional and real modes must invert against each other here.
+        const flowModeSign = appSettings.currentFlowMode === 'conventional' ? -1 : 1;
         const currentDir = baseDirection * flowModeSign;
         const distance = visualTime * Math.abs(c.simData.current);
         
@@ -431,9 +432,10 @@ export const drawWire = (
     
     if (isSimulating && appSettings.showCurrent && Math.abs(w.simData.current) > 1e-6) {
         // Wire current sign is computed along the wire path (point A -> point B).
-        // Conventional follows positive current sign; electron flow is opposite.
+        // Solver sign is aligned with electron flow in this visualization pipeline.
+        // So conventional and real modes must invert against each other here.
         const baseDirection = Math.sign(w.simData.current);
-        const flowModeSign = appSettings.currentFlowMode === 'conventional' ? 1 : -1;
+        const flowModeSign = appSettings.currentFlowMode === 'conventional' ? -1 : 1;
         const currentDir = baseDirection * flowModeSign;
         // visualTimeRef already accumulates (dt * visualFlowSpeed)
         // So we just multiply by current to get distance
@@ -519,7 +521,7 @@ export const drawWire = (
 
     if (isSimulating && appSettings.showCurrent && !!appSettings.showDirectionArrows && Math.abs(w.simData.current) > 1e-6) {
         const baseDirection = Math.sign(w.simData.current);
-        const flowModeSign = appSettings.currentFlowMode === 'conventional' ? 1 : -1;
+        const flowModeSign = appSettings.currentFlowMode === 'conventional' ? -1 : 1;
         const currentDir = baseDirection * flowModeSign;
 
         const arrowSpacing = 90;
