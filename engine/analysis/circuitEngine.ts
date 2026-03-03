@@ -49,32 +49,32 @@ export interface EngineSolveResult {
 }
 
 type LedModelParams = {
-  vf: number;
+  maxVoltage: number;
   ifMax: number;
   failureMode: 'saturate' | 'burn_open';
   brightnessFactor: number;
   hasFailed: boolean;
-  dynamicResistance: number;
+  onResistance: number;
 };
 
 const getLedModelParams = (c: EngineComponent): LedModelParams => {
-  const vf = Math.max(0.8, c.props.voltageDrop ?? 1.73);
+  const maxVoltage = Math.max(0.1, c.props.voltageDrop ?? 2.2);
   const ifMax = Math.max(1e-9, c.props.currentRating ?? ((c.props.maxCurrentMa ?? 20) / 1000));
   const failureMode: 'saturate' | 'burn_open' = c.props.ledFailureMode === 'burn_open' ? 'burn_open' : 'saturate';
   const brightnessFactor = Math.max(0, c.props.ledBrightnessFactor ?? 1);
 
-  // LED with controlled forward drop (quase ideal):
-  // abaixo de Vf, I≈0; acima de Vf, a corrente é definida pelo circuito externo.
-  // Mantemos apenas uma resistência dinâmica muito pequena para estabilidade numérica do MNA/Newton.
-  const dynamicResistance = 1e-3;
+  // LED model for circuit-driven voltage/current:
+  // - reverse bias: almost open;
+  // - forward bias: behaves as a finite resistance, so V/I come from the surrounding circuit.
+  const onResistance = 220;
 
   return {
-    vf,
+    maxVoltage,
     ifMax,
     failureMode,
     brightnessFactor,
     hasFailed: Boolean(c.simData.isFailed),
-    dynamicResistance,
+    onResistance,
   };
 };
 
@@ -85,13 +85,13 @@ const linearizeLed = (vd: number, c: EngineComponent) => {
     return { G: LED_OFF_G, I_eq: 0, current: vd * LED_OFF_G, ...params };
   }
 
-  if (vd <= params.vf) {
+  if (vd <= 0) {
     return { G: LED_OFF_G, I_eq: 0, current: 0, ...params };
   }
 
-  const G = 1 / params.dynamicResistance;
-  const I_eq = -(params.vf / params.dynamicResistance);
-  const current = (vd - params.vf) / params.dynamicResistance;
+  const G = 1 / params.onResistance;
+  const I_eq = 0;
+  const current = vd / params.onResistance;
 
   return { G, I_eq, current, ...params };
 };
@@ -355,7 +355,9 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         const led = linearizeLed(newVoltage, c);
         newCurrent = led.current;
 
-        const hasFailed = led.failureMode === 'burn_open' && (c.simData.isFailed || Math.abs(newCurrent) > led.ifMax);
+        const overVoltage = newVoltage > led.maxVoltage;
+        const overCurrent = Math.abs(newCurrent) > led.ifMax;
+        const hasFailed = c.simData.isFailed || overVoltage || (led.failureMode === 'burn_open' && overCurrent);
         nextState.isFailed = Boolean(hasFailed);
         const luminousCurrent = Math.max(0, Math.abs(newCurrent) - LED_EMISSION_EPSILON);
         const normalized = Math.min(1, luminousCurrent / led.ifMax);
