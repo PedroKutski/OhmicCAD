@@ -7,9 +7,6 @@ const MAX_ITERATIONS = 50;
 const NEWTON_TOLERANCE = 1e-9;
 const LED_OFF_G = 1e-12;
 const LED_EMISSION_EPSILON = 1e-12;
-const LED_IDEALITY = 2;
-const THERMAL_VOLTAGE = 0.02585;
-const MAX_EXP_ARG = 40;
 
 export interface EngineSimData {
   voltage: number;
@@ -58,9 +55,6 @@ type LedModelParams = {
   brightnessFactor: number;
   hasFailed: boolean;
   onResistance: number;
-  forwardVoltage: number;
-  saturationCurrent: number;
-  nVt: number;
 };
 
 const getLedModelParams = (c: EngineComponent): LedModelParams => {
@@ -68,10 +62,6 @@ const getLedModelParams = (c: EngineComponent): LedModelParams => {
   const ifMax = Math.max(1e-9, c.props.currentRating ?? ((c.props.maxCurrentMa ?? 20) / 1000));
   const failureMode: 'saturate' | 'burn_open' = c.props.ledFailureMode === 'burn_open' ? 'burn_open' : 'saturate';
   const brightnessFactor = Math.max(0, c.props.ledBrightnessFactor ?? 1);
-  const forwardVoltage = Math.max(0.1, c.props.voltageDrop ?? 2.2);
-  const nVt = Math.max(1e-4, LED_IDEALITY * THERMAL_VOLTAGE);
-  const expAtFwd = Math.exp(Math.min(MAX_EXP_ARG, forwardVoltage / nVt));
-  const saturationCurrent = Math.max(1e-18, (c.props.saturationCurrent ?? (ifMax / Math.max(expAtFwd - 1, 1e-9))));
 
   // LED model for circuit-driven voltage/current:
   // - reverse bias: almost open;
@@ -85,9 +75,6 @@ const getLedModelParams = (c: EngineComponent): LedModelParams => {
     brightnessFactor,
     hasFailed: Boolean(c.simData.isFailed),
     onResistance,
-    forwardVoltage,
-    saturationCurrent,
-    nVt,
   };
 };
 
@@ -99,14 +86,12 @@ const linearizeLed = (vd: number, c: EngineComponent) => {
   }
 
   if (vd <= 0) {
-    const current = vd * LED_OFF_G;
-    return { G: LED_OFF_G, I_eq: 0, current, ...params };
+    return { G: LED_OFF_G, I_eq: 0, current: 0, ...params };
   }
 
-  const expTerm = Math.exp(Math.min(MAX_EXP_ARG, vd / params.nVt));
-  const current = params.saturationCurrent * (expTerm - 1);
-  const G = Math.max(LED_OFF_G, (params.saturationCurrent / params.nVt) * expTerm);
-  const I_eq = current - G * vd;
+  const G = 1 / params.onResistance;
+  const I_eq = 0;
+  const current = vd / params.onResistance;
 
   return { G, I_eq, current, ...params };
 };
@@ -371,10 +356,10 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         newCurrent = led.current;
 
         const overVoltage = newVoltage > led.maxVoltage;
-        const overCurrent = newCurrent > led.ifMax;
+        const overCurrent = Math.abs(newCurrent) > led.ifMax;
         const hasFailed = c.simData.isFailed || overVoltage || (led.failureMode === 'burn_open' && overCurrent);
         nextState.isFailed = Boolean(hasFailed);
-        const luminousCurrent = Math.max(0, newCurrent - LED_EMISSION_EPSILON);
+        const luminousCurrent = Math.max(0, Math.abs(newCurrent) - LED_EMISSION_EPSILON);
         const normalized = Math.min(1, luminousCurrent / led.ifMax);
         nextState.brightness = hasFailed ? 0 : Math.max(0, normalized * led.brightnessFactor);
       } else if (newVoltage > V_fwd) {
