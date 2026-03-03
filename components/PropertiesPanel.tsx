@@ -395,24 +395,38 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
                   />
               </div>
               <div>
-                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Rated Current (A)</label>
+                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">If max (mA)</label>
                   <input
                       type="number"
-                      min={0.001}
-                      step={0.001}
-                      value={comp.props.currentRating ?? 0.01}
-                      onChange={(e) => onUpdateCompProps(comp.id, { currentRating: parseFloat(e.target.value) })}
+                      min={1}
+                      step={1}
+                      value={comp.props.maxCurrentMa ?? Math.round((comp.props.currentRating ?? 0.01) * 1000)}
+                      onChange={(e) => {
+                          const mA = parseFloat(e.target.value);
+                          onUpdateCompProps(comp.id, { maxCurrentMa: mA, currentRating: mA / 1000 });
+                      }}
                       className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
                   />
               </div>
               <div>
-                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Saturation Current (A)</label>
+                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Failure Mode</label>
+                  <select
+                      value={comp.props.ledFailureMode || 'saturate'}
+                      onChange={(e) => onUpdateCompProps(comp.id, { ledFailureMode: e.target.value as 'saturate' | 'burn_open' })}
+                      className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
+                  >
+                      <option value="saturate">Saturate brightness</option>
+                      <option value="burn_open">Burn open circuit</option>
+                  </select>
+              </div>
+              <div>
+                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Brightness Factor</label>
                   <input
                       type="number"
-                      min={1e-12}
-                      step={1e-11}
-                      value={comp.props.saturationCurrent ?? 9.32e-11}
-                      onChange={(e) => onUpdateCompProps(comp.id, { saturationCurrent: parseFloat(e.target.value) })}
+                      min={0}
+                      step={0.1}
+                      value={comp.props.ledBrightnessFactor ?? 1}
+                      onChange={(e) => onUpdateCompProps(comp.id, { ledBrightnessFactor: parseFloat(e.target.value) })}
                       className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
                   />
               </div>
