@@ -1,80 +1,79 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
 # OhmicCAD
 
-Simulador eletrônico interativo com solver não linear, visualização em tempo real e interface React.
+O **OhmicCAD** é um simulador de circuitos eletrônicos interativo e de alta performance, desenvolvido com **React** e **TypeScript**. O projeto foca em fornecer uma experiência de simulação em tempo real diretamente no navegador, utilizando métodos numéricos avançados para resolver redes lineares e não lineares.
 
-## Requisitos
+> 🚧 **Status do Projeto:** Em desenvolvimento ativo (Work in Progress). Funcionalidades de solver e interface básica já operacionais.
 
-- Node.js 20+ (recomendado)
-- npm 10+
+---
 
-## Setup local
+## 🚀 Funcionalidades Principais
 
-1. Instale as dependências:
+* **Solver Não Linear:** Motor de simulação baseado em **MNA (Modified Nodal Analysis)**.
+* **Iteração de Newton-Raphson:** Suporte para componentes não lineares (diodos, transistores) com convergência iterativa.
+* **Visualização em Tempo Real:** Renderização dinâmica de tensões e correntes conforme o circuito é modificado no canvas.
+* **Interface Reativa:** Editor intuitivo construído com React, permitindo a manipulação fluida de componentes (`ComponentModel`) e conexões (`WireModel`).
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Crie o arquivo de ambiente local e configure a chave da API Gemini:
+## 🏗️ Arquitetura do Sistema
 
-   ```bash
-   cp .env.example .env.local
-   ```
+O projeto é estruturado em três camadas principais para garantir a separação de responsabilidades:
 
-   Se `.env.example` não existir, crie `.env.local` com:
+1.  **UI Layer (React + Vite):** Gerencia o canvas do editor, painéis de propriedades e o estado da interface. Localizado em `src/components`.
+2.  **Abstraction Layer (Services):** O arquivo `services/Solver.ts` atua como uma ponte, convertendo os modelos da interface para o formato matemático processável pela engine.
+3.  **Core Engine (Physics):** O coração do projeto em `engine/analysis/circuitEngine.ts`. Implementa as leis de Kirchhoff e os algoritmos de resolução de sistemas lineares.
 
-   ```env
-   GEMINI_API_KEY=sua_chave_aqui
-   ```
+---
 
-3. Inicie em modo desenvolvimento:
+## 🛠️ Tecnologias Utilizadas
 
-   ```bash
-   npm run dev
-   ```
+* **Frontend:** [React.js](https://reactjs.org/)
+* **Linguagem:** [TypeScript](https://www.typescriptlang.org/) (Tipagem estrita para segurança no solver)
+* **Build Tool:** [Vite](https://vitejs.dev/)
+* **IA Integration:** Google Gemini API (para auxílio em análise e sugestões de circuitos)
 
-4. Acesse `http://localhost:5173`.
+---
 
-## Scripts úteis
+## 💻 Configuração Local
 
-- `npm run dev` — sobe a aplicação local.
-- `npm run build` — gera build de produção.
-- `npm run lint` — valida tipagem TypeScript (`tsc --noEmit`).
-- `npm run preview` — serve build local para validação.
+### Pré-requisitos
+* **Node.js:** v20 ou superior
+* **npm:** v10 ou superior
 
-## Arquitetura (visão breve)
+### Instalação
 
-- **UI (React + Vite):** renderização do editor, painéis de propriedades e interação do usuário (`App.tsx`, `components/*`).
-- **Solver (engine canônica):** regras físicas e análise de circuito em `engine/analysis/circuitEngine.ts`, incluindo MNA, dispositivos lineares/não lineares e iteração de Newton.
-- **Dados e adaptação:** `services/Solver.ts` converte modelos da UI (`ComponentModel`/`WireModel`) para o formato da engine e reconcilia resultados no estado de simulação; dados estáticos de apoio ficam em `data/*`.
+1.  **Clone o repositório e instale as dependências:**
+    ```bash
+    npm install
+    ```
 
-## Contribuição
+2.  **Configure as variáveis de ambiente:**
+    Crie um arquivo `.env.local` na raiz do projeto:
+    ```env
+    GEMINI_API_KEY=sua_chave_aqui
+    ```
 
-Fluxo sugerido:
+3.  **Inicie o servidor de desenvolvimento:**
+    ```bash
+    npm run dev
+    ```
+    Acesse: `http://localhost:5173`
 
-1. Abra uma issue descrevendo bug, melhoria ou funcionalidade.
-2. Crie uma branch com escopo pequeno e focado.
-3. Envie um PR referenciando a issue.
-4. Ajuste o PR conforme revisão.
+---
 
-### Checklist de Pull Request
+## 📉 Roadmap de Desenvolvimento
 
-- [ ] `npm run build` executa sem erros.
-- [ ] `npm run lint` executa sem erros.
-- [ ] Documentação atualizada (README, comentários e/ou instruções técnicas).
-- [ ] Mudanças em UI/fluxo foram verificadas manualmente.
-- [ ] Novas decisões técnicas foram registradas de forma clara no PR.
+- [x] Implementação do Solver MNA básico.
+- [x] Interface de edição (Drag & Drop).
+- [ ] Implementação de análise transiente (Time-stepping).
+- [ ] Expansão da biblioteca de componentes (MOSFETs, OpAmps).
+- [ ] Exportação de esquemáticos em formato JSON/Netlist.
 
-## Licença
+---
 
-Este projeto atualmente **não possui uma licença open source publicada**.
-Na ausência de um arquivo `LICENSE`, todos os direitos são reservados ao autor.
+## 📄 Licença e Contato
 
-## Autor e contato
+**Licença:** Atualmente, todos os direitos são reservados ao autor.
 
-- **Autor:** Pedro Kutski
-- **Contato:** pedrokutski@outlook.com
+**Desenvolvedor:** Pedro Kutski  
+**Email:** [pedrokutski@outlook.com](mailto:pedrokutski@outlook.com)
