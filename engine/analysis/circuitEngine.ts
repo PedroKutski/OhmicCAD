@@ -387,9 +387,9 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
     if (c.type !== 'capacitor' && c.type !== 'capacitor_pol' && c.type !== 'inductor') {
       let voltage = c.type === 'ac_source' ? newVoltage : Math.abs(newVoltage);
       if (c.type === 'led') {
-        const vf = Math.max(0.8, c.props.voltageDrop ?? 1.73);
-        const isConducting = Math.abs(newCurrent) > 1e-9 && !nextState.isFailed;
-        voltage = isConducting ? vf : Math.max(0, voltage);
+        // Exibe sempre a tensão realmente calculada no LED (não fixa em Vf),
+        // para refletir o valor que chega ao componente dentro do circuito desenhado.
+        voltage = Math.max(0, voltage);
       }
       if (voltage < 1e-6) voltage = 0;
       nextState.voltage = voltage;
