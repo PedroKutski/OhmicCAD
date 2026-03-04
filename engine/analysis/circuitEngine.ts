@@ -7,6 +7,7 @@ const MAX_ITERATIONS = 50;
 const NEWTON_TOLERANCE = 1e-9;
 const LED_OFF_G = 1e-12;
 const LED_EMISSION_EPSILON = 1e-12;
+const THERMAL_VOLTAGE_300K = 0.025851999786;
 
 export interface EngineSimData {
   voltage: number;
@@ -49,64 +50,92 @@ export interface EngineSolveResult {
 }
 
 type LedModelParams = {
-  vfNominal: number;
   maxVoltage: number;
   ifMax: number;
   failureMode: 'saturate' | 'burn_open';
   brightnessFactor: number;
   hasFailed: boolean;
+  saturationCurrent: number;
+  idealityFactor: number;
+  internalSeriesResistance: number;
+  externalSeriesResistance: number;
+  totalSeriesResistance: number;
+};
+
+type LedLinearizedModel = LedModelParams & {
+  G: number;
+  I_eq: number;
+  current: number;
   dynamicResistance: number;
-  kneeConductance: number;
+  junctionVoltage: number;
 };
 
 const getLedModelParams = (c: EngineComponent): LedModelParams => {
-  const vfNominal = 1.9;
   const configuredMaxVoltage = c.props.maxVoltage ?? c.props.voltageDrop;
-  const maxVoltage = Math.max(vfNominal + 0.1, configuredMaxVoltage ?? 4);
+  const maxVoltage = Math.max(1, configuredMaxVoltage ?? 4);
   const ifMax = Math.max(1e-9, c.props.currentRating ?? ((c.props.maxCurrentMa ?? 20) / 1000));
   const failureMode: 'saturate' | 'burn_open' = c.props.ledFailureMode === 'burn_open' ? 'burn_open' : 'saturate';
   const brightnessFactor = Math.max(0, c.props.ledBrightnessFactor ?? 1);
-
-  // LED model for circuit-driven voltage/current:
-  // - reverse bias: almost open;
-  // - forward bias: behaves as a finite resistance, so V/I come from the surrounding circuit.
-  const dynamicResistance = 12;
-  const kneeConductance = 1e-9;
+  const saturationCurrent = Math.max(1e-18, c.props.saturationCurrent ?? 2e-12);
+  const idealityFactor = Math.min(4, Math.max(1, c.props.idealityFactor ?? 2));
+  const internalSeriesResistance = Math.max(0, c.props.internalSeriesResistance ?? 2);
+  const externalSeriesResistance = Math.max(1e-6, c.props.ledSeriesResistance ?? 330);
 
   return {
-    vfNominal,
     maxVoltage,
     ifMax,
     failureMode,
     brightnessFactor,
     hasFailed: Boolean(c.simData.isFailed),
-    dynamicResistance,
-    kneeConductance,
+    saturationCurrent,
+    idealityFactor,
+    internalSeriesResistance,
+    externalSeriesResistance,
+    totalSeriesResistance: internalSeriesResistance + externalSeriesResistance,
   };
 };
 
-const linearizeLed = (vd: number, c: EngineComponent) => {
+const solveLedCurrentFromVoltage = (vd: number, params: LedModelParams): number => {
+  if (params.failureMode === 'burn_open' && params.hasFailed) return vd * LED_OFF_G;
+
+  const Is = params.saturationCurrent;
+  const nVt = params.idealityFactor * THERMAL_VOLTAGE_300K;
+  const Rs = Math.max(1e-9, params.totalSeriesResistance);
+
+  let current = Math.max(-0.95 * Is, vd / Math.max(10, Rs));
+
+  for (let i = 0; i < 30; i++) {
+    const onePlus = Math.max(1e-18, 1 + current / Is);
+    const f = nVt * Math.log(onePlus) + (current * Rs) - vd;
+    const df = (nVt / (Is * onePlus)) + Rs;
+    const delta = f / Math.max(1e-15, df);
+    current -= delta;
+    const minCurrent = -0.999999 * Is;
+    if (current < minCurrent) current = minCurrent;
+    if (Math.abs(delta) < 1e-12) break;
+  }
+
+  return current;
+};
+
+const linearizeLed = (vd: number, c: EngineComponent): LedLinearizedModel => {
   const params = getLedModelParams(c);
 
   if (params.failureMode === 'burn_open' && params.hasFailed) {
-    return { G: LED_OFF_G, I_eq: 0, current: vd * LED_OFF_G, ...params };
+    return { G: LED_OFF_G, I_eq: 0, current: vd * LED_OFF_G, dynamicResistance: 1 / LED_OFF_G, junctionVoltage: 0, ...params };
   }
 
-  if (vd <= 0) {
-    return { G: LED_OFF_G, I_eq: 0, current: vd * LED_OFF_G, ...params };
-  }
+  const current = solveLedCurrentFromVoltage(vd, params);
+  const Is = params.saturationCurrent;
+  const nVt = params.idealityFactor * THERMAL_VOLTAGE_300K;
+  const expArg = Math.log(Math.max(1e-18, 1 + current / Is));
+  const junctionVoltage = nVt * expArg;
+  const junctionDynamicResistance = nVt / Math.max(current + Is, 1e-18);
+  const dynamicResistance = Math.max(1e-9, params.totalSeriesResistance + junctionDynamicResistance);
+  const G = 1 / dynamicResistance;
+  const I_eq = current - (G * vd);
 
-  if (vd < params.vfNominal) {
-    const G = params.kneeConductance;
-    return { G, I_eq: 0, current: vd * G, ...params };
-  }
-
-  const G = 1 / params.dynamicResistance;
-  const kneeCurrent = params.kneeConductance * params.vfNominal;
-  const I_eq = kneeCurrent - (G * params.vfNominal);
-  const current = (G * vd) + I_eq;
-
-  return { G, I_eq, current, ...params };
+  return { G, I_eq, current, dynamicResistance, junctionVoltage, ...params };
 };
 
 const buildPortToNetMap = (components: EngineComponent[], wires: EngineWire[]): Map<string, number> => {
@@ -226,6 +255,14 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
       simData: { voltage: 0, current: 0, power: 0 } as EngineSimData,
     })),
   ];
+
+  const ledWithoutSeriesResistor = components.find(c => c.type === 'led' && (!Number.isFinite(c.props.ledSeriesResistance) || c.props.ledSeriesResistance <= 0));
+  if (ledWithoutSeriesResistor) {
+    return {
+      ok: false,
+      error: `LED ${ledWithoutSeriesResistor.props.name || ledWithoutSeriesResistor.id} precisa de resistor em série (> 0 Ω).`,
+    };
+  }
   const preferredGround = components.find(c => c.type === 'gnd');
   const groundNet = preferredGround ? (portToNet.get(`${preferredGround.id}_0`) ?? 0) : 0;
 
@@ -469,10 +506,8 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         const hasFailed = c.simData.isFailed || overVoltage || (ledModel.failureMode === 'burn_open' && overCurrent);
         nextState.isFailed = Boolean(hasFailed);
 
-        const emissionKneeCurrent = ledModel.kneeConductance * ledModel.vfNominal;
-        const usefulForwardCurrent = Math.max(0, newCurrent - emissionKneeCurrent - LED_EMISSION_EPSILON);
-        const usefulCurrentRange = Math.max(ledModel.ifMax - emissionKneeCurrent, 1e-12);
-        const normalized = Math.min(1, usefulForwardCurrent / usefulCurrentRange);
+        const usefulForwardCurrent = Math.max(0, newCurrent - LED_EMISSION_EPSILON);
+        const normalized = Math.min(1, usefulForwardCurrent / Math.max(ledModel.ifMax, 1e-12));
         nextState.brightness = hasFailed ? 0 : Math.max(0, normalized * ledModel.brightnessFactor);
       } else if (newVoltage > V_fwd) {
         newCurrent = (newVoltage - V_fwd) / R_on;
@@ -484,7 +519,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
 
       if (c.type === 'led' && ledModel) {
         const ledOffResistance = 1 / LED_OFF_G;
-        nextState.resistance = newCurrent > 1e-12 ? Math.max(ledModel.dynamicResistance, Math.abs(newVoltage / newCurrent)) : ledOffResistance;
+        nextState.resistance = newCurrent > 1e-12 ? Math.abs(newVoltage / newCurrent) : ledOffResistance;
       } else {
         nextState.resistance = Math.abs(newCurrent) > 1e-12 ? Math.abs(newVoltage / newCurrent) : 1 / G_off;
       }
