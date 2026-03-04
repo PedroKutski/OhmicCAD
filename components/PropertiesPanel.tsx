@@ -389,8 +389,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
                       type="number"
                       min={0.1}
                       step={0.1}
-                      value={comp.props.voltageDrop ?? 2.2}
-                      onChange={(e) => onUpdateCompProps(comp.id, { voltageDrop: parseFloat(e.target.value) })}
+                      value={comp.props.maxVoltage ?? comp.props.voltageDrop ?? 2.2}
+                      onChange={(e) => onUpdateCompProps(comp.id, { maxVoltage: parseFloat(e.target.value) })}
                       className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
                   />
               </div>
