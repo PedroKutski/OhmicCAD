@@ -61,6 +61,31 @@ export const drawComponent = (
         ctx.strokeStyle = isSelected ? theme.selected : theme.componentStroke;
         break;
 
+
+      case ComponentType.VCC:
+        ctx.beginPath();
+        ctx.moveTo(0, 40); ctx.lineTo(0, 12);
+        ctx.moveTo(-10, 12); ctx.lineTo(0, -2); ctx.lineTo(10, 12);
+        ctx.moveTo(-14, 40); ctx.lineTo(14, 40);
+        ctx.stroke();
+        ctx.strokeStyle = theme.accent;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(14, -12); ctx.lineTo(20, -12);
+        ctx.moveTo(17, -15); ctx.lineTo(17, -9);
+        ctx.stroke();
+        ctx.strokeStyle = isSelected ? theme.selected : theme.componentStroke;
+        ctx.lineWidth = isSelected ? 3 : 2;
+        break;
+
+      case ComponentType.GND:
+        ctx.beginPath();
+        ctx.moveTo(0, -40); ctx.lineTo(0, -10);
+        ctx.moveTo(-16, -10); ctx.lineTo(16, -10);
+        ctx.moveTo(-11, -4); ctx.lineTo(11, -4);
+        ctx.moveTo(-6, 2); ctx.lineTo(6, 2);
+        ctx.stroke();
+        break;
       case ComponentType.Resistor:
         ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-24, 0);
         for (let i = 0; i < 6; i++) ctx.lineTo(-18 + i * 7.2, i % 2 === 0 ? -10 : 10);

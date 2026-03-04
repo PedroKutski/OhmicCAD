@@ -225,7 +225,7 @@ const App: React.FC = () => {
   };
 
   const getAbsPorts = useCallback((c: ComponentModel): Port[] => {
-    if (c.type === ComponentType.Junction) return [{ id: 0, x: c.x, y: c.y, parentId: c.id }];
+    if (c.type === ComponentType.Junction || c.type === ComponentType.GND || c.type === ComponentType.VCC) return [{ id: 0, x: c.x, y: c.y, parentId: c.id }];
     const basePorts = [{ id: 0, x: -40, y: 0 }, { id: 1, x: 40, y: 0 }];
     return basePorts.map(p => {
       const r = rotatePoint(p.x, p.y, c.rotation);
@@ -320,12 +320,14 @@ const App: React.FC = () => {
         case ComponentType.PolarizedCapacitor: prefix = 'C'; break;
         case ComponentType.Inductor: prefix = 'L'; break;
         case ComponentType.ACSource: prefix = 'V'; break;
-        case ComponentType.Battery: prefix = 'V'; break;
+        case ComponentType.Battery:
+        case ComponentType.VCC: prefix = 'V'; break;
         case ComponentType.Switch: 
         case ComponentType.PushButton: prefix = 'S'; break;
         case ComponentType.Diode:
         case ComponentType.LED: prefix = 'D'; break;
         case ComponentType.Lamp: prefix = 'L'; break;
+        case ComponentType.GND: prefix = 'G'; break;
         case ComponentType.Junction: prefix = 'J'; break;
     }
 
@@ -347,6 +349,7 @@ const App: React.FC = () => {
     
     // Props init
     if (type === ComponentType.Battery) { newComp.props.voltage = 9; newComp.props.capacity = 1000; }
+    else if (type === ComponentType.VCC) { newComp.props.voltage = 5; }
     else if (type === ComponentType.Resistor) { newComp.props.resistance = 1000; }
     else if (type === ComponentType.Capacitor || type === ComponentType.PolarizedCapacitor) { newComp.props.capacitance = 10; newComp.props.capacitanceUnit = 'µF'; }
     else if (type === ComponentType.Inductor) { newComp.props.inductance = 100e-3; }
