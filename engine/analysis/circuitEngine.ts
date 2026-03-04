@@ -60,8 +60,9 @@ type LedModelParams = {
 };
 
 const getLedModelParams = (c: EngineComponent): LedModelParams => {
-  const vfNominal = Math.max(0.8, c.props.voltageDrop ?? 1.73);
-  const maxVoltage = Math.max(vfNominal + 0.1, c.props.maxVoltage ?? (vfNominal * 2));
+  const vfNominal = 1.9;
+  const configuredMaxVoltage = c.props.maxVoltage ?? c.props.voltageDrop;
+  const maxVoltage = Math.max(vfNominal + 0.1, configuredMaxVoltage ?? 4);
   const ifMax = Math.max(1e-9, c.props.currentRating ?? ((c.props.maxCurrentMa ?? 20) / 1000));
   const failureMode: 'saturate' | 'burn_open' = c.props.ledFailureMode === 'burn_open' ? 'burn_open' : 'saturate';
   const brightnessFactor = Math.max(0, c.props.ledBrightnessFactor ?? 1);

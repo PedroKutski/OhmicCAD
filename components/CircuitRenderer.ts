@@ -368,7 +368,7 @@ export const drawComponent = (
             if (c.props.amplitude !== undefined) valueStr += formatUnit(c.props.amplitude, 'V');
             if (c.props.frequency !== undefined) valueStr += ` ${formatUnit(c.props.frequency, 'Hz')}`;
         } else if (c.type === ComponentType.LED) {
-            valueStr = `Vf ${formatUnit(c.props.voltageDrop ?? 1.73, 'V')}`;
+            valueStr = `V ${formatUnit(c.simData.voltage ?? 0, 'V')}`;
         }
         
         const text = `${label}   ${valueStr}`.trim();
