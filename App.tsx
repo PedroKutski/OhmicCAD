@@ -782,10 +782,11 @@ const App: React.FC = () => {
                   `2) Indutância configurada: L = ${fmt(component.props.inductance || 0)} H`,
                   `3) Potência instantânea monitorada: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
-          } else if (component.type === ComponentType.Battery) {
+          } else if (component.type === ComponentType.Battery || component.type === ComponentType.VCC || component.type === ComponentType.GND) {
               const sourceV = component.props.voltage || 0;
+              const kind = component.type === ComponentType.Battery ? 'Fonte DC ideal' : `Pino ${component.type.toUpperCase()} (par de alimentação)`;
               lines.push(
-                  `1) Fonte DC ideal: Vfonte = constante`,
+                  `1) ${kind}: Vfonte = constante`,
                   `   Valor configurado: Vfonte = ${fmt(sourceV)} V`,
                   `2) Potência entregue/absorvida: P = V × I`,
                   `   Substituindo: P = (${fmt(V)}) × (${fmt(I)})`,
