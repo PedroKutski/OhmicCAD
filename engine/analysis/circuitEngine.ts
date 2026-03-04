@@ -407,10 +407,9 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
       return;
     }
 
-    const u = portToNet.get(`${c.id}_0`)!;
-    const v = portToNet.get(`${c.id}_1`)!;
-
-    const newVoltage = sol[u] - sol[v];
+    const u = portToNet.get(`${c.id}_0`) ?? 0;
+    const v = portToNet.get(`${c.id}_1`);
+    const newVoltage = v === undefined ? 0 : sol[u] - sol[v];
     let newCurrent = 0;
     const nextState: Partial<EngineSimData> = {};
 
@@ -425,7 +424,8 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         if (vsIdx >= 0) {
           newCurrent = -sol[netCount + vsIdx];
           const gndNet = portToNet.get(`${pair.gndId}_0`) ?? 0;
-          nextState.voltage = sol[u] - sol[gndNet];
+          const supplyVoltage = Math.abs(sol[u] - sol[gndNet]);
+          nextState.voltage = supplyVoltage < 1e-6 ? 0 : supplyVoltage;
         }
       }
     } else if (c.type === 'capacitor' || c.type === 'capacitor_pol') {
@@ -503,7 +503,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
     const smoothedCurrent = c.simData.current * (1 - alpha) + newCurrent * alpha;
     nextState.current = smoothedCurrent;
 
-    if (c.type !== 'capacitor' && c.type !== 'capacitor_pol' && c.type !== 'inductor') {
+    if (c.type !== 'capacitor' && c.type !== 'capacitor_pol' && c.type !== 'inductor' && c.type !== 'vcc') {
       let voltage = c.type === 'ac_source' ? newVoltage : Math.abs(newVoltage);
       if (c.type === 'led') {
         // Exibe sempre a tensão realmente calculada no LED (não fixa em Vf),
