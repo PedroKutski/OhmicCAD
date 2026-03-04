@@ -17,6 +17,9 @@ import { GraphPanel } from './components/GraphPanel';
 import { CircuitLibraryModal } from './components/CircuitLibraryModal';
 
 const VISUAL_SPEEDS = [0, 1, 5, 10, 100, 1000, 5000, 20000];
+const GRAPH_MAX_HISTORY = 2000;
+
+type GraphPoint = { time: number; voltage: number; current: number };
 
 const App: React.FC = () => {
   const isObjectLike = (value: unknown): value is Record<string, unknown> => (
@@ -105,6 +108,7 @@ const App: React.FC = () => {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, id: string } | null>(null);
   const [editPanel, setEditPanel] = useState<{ x: number, y: number, id: string } | null>(null);
   const [graphs, setGraphs] = useState<{ id: string, componentId: string, type: 'voltage' | 'current', color: string }[]>([]);
+  const [graphData, setGraphData] = useState<Record<string, GraphPoint[]>>({});
 
   const [history, setHistory] = useState<{components: ComponentModel[], wires: WireModel[]}[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -170,6 +174,9 @@ const App: React.FC = () => {
     const dt = 0.001 * appSettings.timeStepMultiplier; // Physics step size (1ms)
 
     const loop = () => {
+        const frameGraphSamples: Record<string, GraphPoint[]> = {};
+        const activeComponentIds = new Set(graphs.map(g => g.componentId));
+
         // Determine steps based on speed setting
         // visualFlowSpeed is roughly "steps per second"
         // At 60fps (16ms), speed 1000 -> 16 steps.
@@ -194,9 +201,47 @@ const App: React.FC = () => {
                 break;
             }
             simTimeRef.current += dt;
+
+            activeComponentIds.forEach((compId) => {
+                const comp = componentsRef.current.find(c => c.id === compId);
+                if (!comp) return;
+
+                const voltage = comp.type === ComponentType.ACSource
+                  ? (comp.props.amplitude || 20) * Math.sin(2 * Math.PI * (comp.props.frequency || 60) * simTimeRef.current)
+                  : comp.simData.voltage;
+
+                if (!frameGraphSamples[compId]) frameGraphSamples[compId] = [];
+                frameGraphSamples[compId].push({
+                  time: simTimeRef.current,
+                  voltage,
+                  current: comp.simData.current
+                });
+            });
             
             // Bail if we're taking too long
             if (performance.now() - startTime > timeBudget) break;
+        }
+
+        if (Object.keys(frameGraphSamples).length > 0) {
+            setGraphData(prev => {
+              const next: Record<string, GraphPoint[]> = { ...prev };
+
+              Object.entries(frameGraphSamples).forEach(([compId, samples]) => {
+                const merged = [...(next[compId] || []), ...samples];
+                if (merged.length > GRAPH_MAX_HISTORY) {
+                  merged.splice(0, merged.length - GRAPH_MAX_HISTORY);
+                }
+                next[compId] = merged;
+              });
+
+              Object.keys(next).forEach((compId) => {
+                if (!activeComponentIds.has(compId)) {
+                  delete next[compId];
+                }
+              });
+
+              return next;
+            });
         }
 
         setSimTime(simTimeRef.current);
@@ -208,7 +253,12 @@ const App: React.FC = () => {
 
     animationFrameId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [isSimulating, isPaused, appSettings.timeStepMultiplier, appSettings.visualFlowSpeed]);
+  }, [isSimulating, isPaused, appSettings.timeStepMultiplier, appSettings.visualFlowSpeed, graphs]);
+
+  useEffect(() => {
+    if (isSimulating) return;
+    setGraphData({});
+  }, [isSimulating]);
 
   useEffect(() => {
     localStorage.setItem('ohmic_components', JSON.stringify(components));
@@ -218,6 +268,7 @@ const App: React.FC = () => {
 
   const resetSimulation = () => {
     setSimTime(0); simTimeRef.current = 0;
+    setGraphData({});
     const reset = { voltage: 0, current: 0, power: 0, eField: 0, bField: 0, driftV: 0, flowDir: 0, storedVoltage: 0, storedCurrent: 0 };
     setComponents(prev => prev.map(c => ({ ...c, state: false, simData: { ...reset } })));
     setWires(prev => prev.map(w => ({ ...w, simData: { ...reset } })));
@@ -1185,9 +1236,8 @@ const App: React.FC = () => {
         <GraphPanel 
             graphs={graphs} 
             components={components} 
+            graphData={graphData}
             onRemoveGraph={(id) => setGraphs(prev => prev.filter(g => g.id !== id))}
-            isSimulating={isSimulating}
-            simTime={simTime}
         />
 
         <div className="absolute top-6 right-6 z-10 flex items-center gap-2 bg-[#252525] border border-zinc-700 p-1.5 rounded-lg shadow-2xl">
