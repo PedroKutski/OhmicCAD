@@ -176,9 +176,56 @@ const buildPortToNetMap = (components: EngineComponent[], wires: EngineWire[]): 
 };
 
 export const solveCircuit = (components: EngineComponent[], wires: EngineWire[], dt = 0.1, simTime = 0): EngineSolveResult => {
-  const voltageSources = components.filter(c => c.type === 'battery' || c.type === 'ac_source' || c.type === 'vcc');
   const portToNet = buildPortToNetMap(components, wires);
   const netCount = new Set(portToNet.values()).size;
+  const gndComponents = components.filter(c => c.type === 'gnd');
+  const vccComponents = components.filter(c => c.type === 'vcc');
+
+  const getSupplyKey = (c: EngineComponent) => {
+    const name = String(c.props.name || '').trim().toUpperCase();
+    return name.match(/(\d+)$/)?.[1] || '';
+  };
+
+  const gndByKey = new Map<string, EngineComponent[]>();
+  gndComponents.forEach(gnd => {
+    const key = getSupplyKey(gnd);
+    const bucket = gndByKey.get(key) || [];
+    bucket.push(gnd);
+    gndByKey.set(key, bucket);
+  });
+
+  const gndUsage = new Map<string, number>();
+  const vccGndPairs = vccComponents
+    .map(vcc => {
+      const key = getSupplyKey(vcc);
+      const sameKeyCandidates = gndByKey.get(key) || [];
+      const candidates = sameKeyCandidates.length > 0 ? sameKeyCandidates : gndComponents;
+      if (candidates.length === 0) return null;
+
+      let selected = candidates[0];
+      let selectedUsage = gndUsage.get(selected.id) || 0;
+      for (let i = 1; i < candidates.length; i++) {
+        const usage = gndUsage.get(candidates[i].id) || 0;
+        if (usage < selectedUsage) {
+          selected = candidates[i];
+          selectedUsage = usage;
+        }
+      }
+
+      gndUsage.set(selected.id, selectedUsage + 1);
+      return { vccId: vcc.id, gndId: selected.id, voltage: vcc.props.voltage || 5 };
+    })
+    .filter((pair): pair is { vccId: string; gndId: string; voltage: number } => pair !== null);
+
+  const voltageSources = [
+    ...components.filter(c => c.type === 'battery' || c.type === 'ac_source'),
+    ...vccGndPairs.map(pair => ({
+      id: `vcc_gnd_pair_${pair.vccId}_${pair.gndId}`,
+      type: 'vcc_pair',
+      props: { voltage: pair.voltage },
+      simData: { voltage: 0, current: 0, power: 0 } as EngineSimData,
+    })),
+  ];
   const preferredGround = components.find(c => c.type === 'gnd');
   const groundNet = preferredGround ? (portToNet.get(`${preferredGround.id}_0`) ?? 0) : 0;
 
@@ -283,11 +330,17 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         const freq = c.props.frequency || 60;
         const val = amp * Math.sin(2 * Math.PI * freq * simTime);
         stampVoltageSource(v, u, val, netCount + vsIdx, 0.1);
-      } else if (c.type === 'vcc') {
-        const vsIdx = voltageSources.findIndex(src => src.id === c.id);
-        const val = c.props.voltage || 5;
-        stampVoltageSource(u, groundNet, val, netCount + vsIdx, 0.05);
       }
+    });
+
+    vccGndPairs.forEach(pair => {
+      const u = portToNet.get(`${pair.vccId}_0`);
+      const v = portToNet.get(`${pair.gndId}_0`);
+      if (u === undefined || v === undefined) return;
+      const sourceId = `vcc_gnd_pair_${pair.vccId}_${pair.gndId}`;
+      const vsIdx = voltageSources.findIndex(src => src.id === sourceId);
+      if (vsIdx < 0) return;
+      stampVoltageSource(u, v, pair.voltage, netCount + vsIdx, 0.05);
     });
 
     for (let i = 0; i < netCount; i++) A.add(i, i, G_MIN);
@@ -317,6 +370,8 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
   }
 
   const componentStates: Record<string, Partial<EngineSimData>> = {};
+  const pairByVcc = new Map(vccGndPairs.map(pair => [pair.vccId, pair]));
+  const pairByGnd = new Map(vccGndPairs.map(pair => [pair.gndId, pair]));
   const portCurrents = new Map<string, number>();
   const portWireDegree = new Map<string, number>();
 
@@ -328,7 +383,30 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
   });
 
   components.forEach(c => {
-    if (c.type === 'junction' || c.type === 'gnd') return;
+    if (c.type === 'junction') return;
+
+    if (c.type === 'gnd') {
+      const pair = pairByGnd.get(c.id);
+      if (!pair) {
+        componentStates[c.id] = { voltage: 0, current: 0, power: 0 };
+        return;
+      }
+
+      const sourceId = `vcc_gnd_pair_${pair.vccId}_${pair.gndId}`;
+      const vsIdx = voltageSources.findIndex(src => src.id === sourceId);
+      if (vsIdx < 0) {
+        componentStates[c.id] = { voltage: 0, current: 0, power: 0 };
+        return;
+      }
+
+      const vccNet = portToNet.get(`${pair.vccId}_0`) ?? 0;
+      const gndNet = portToNet.get(`${pair.gndId}_0`) ?? 0;
+      const voltage = sol[vccNet] - sol[gndNet];
+      const current = -sol[netCount + vsIdx];
+      componentStates[c.id] = { voltage, current, power: Math.abs(voltage * current) };
+      return;
+    }
+
     const u = portToNet.get(`${c.id}_0`)!;
     const v = portToNet.get(`${c.id}_1`)!;
 
@@ -336,9 +414,20 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
     let newCurrent = 0;
     const nextState: Partial<EngineSimData> = {};
 
-    if (c.type === 'battery' || c.type === 'ac_source' || c.type === 'vcc') {
+    if (c.type === 'battery' || c.type === 'ac_source') {
       const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
       newCurrent = -sol[netCount + vsIdx];
+    } else if (c.type === 'vcc') {
+      const pair = pairByVcc.get(c.id);
+      if (pair) {
+        const sourceId = `vcc_gnd_pair_${pair.vccId}_${pair.gndId}`;
+        const vsIdx = voltageSources.findIndex(src => src.id === sourceId);
+        if (vsIdx >= 0) {
+          newCurrent = -sol[netCount + vsIdx];
+          const gndNet = portToNet.get(`${pair.gndId}_0`) ?? 0;
+          nextState.voltage = sol[u] - sol[gndNet];
+        }
+      }
     } else if (c.type === 'capacitor' || c.type === 'capacitor_pol') {
       const unit = c.props.capacitanceUnit || 'µF';
       let mult = 1e-6;
