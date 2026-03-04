@@ -414,7 +414,7 @@ const App: React.FC = () => {
     else if (type === ComponentType.Inductor) { newComp.props.inductance = 100e-3; }
     else if (type === ComponentType.ACSource) { newComp.props.amplitude = 20; newComp.props.frequency = 60; }
     else if (type === ComponentType.Diode) { newComp.props.diodeType = 'rectifier'; }
-    else if (type === ComponentType.LED) { newComp.props.diodeType = 'led'; newComp.props.maxVoltage = 2.2; newComp.props.currentRating = 0.01; newComp.props.maxCurrentMa = 10; newComp.props.saturationCurrent = 2e-12; newComp.props.idealityFactor = 2; newComp.props.internalSeriesResistance = 2; newComp.props.ledSeriesResistance = 330; newComp.props.ledBrightnessFactor = 1; newComp.props.ledFailureMode = 'saturate'; newComp.props.ledColor = '#ff4d4d'; }
+    else if (type === ComponentType.LED) { newComp.props.diodeType = 'led'; newComp.props.maxVoltage = 2.2; newComp.props.currentRating = 0.01; newComp.props.maxCurrentMa = 10; newComp.props.ledBrightnessFactor = 1; newComp.props.ledFailureMode = 'saturate'; newComp.props.ledColor = '#ff4d4d'; }
     else if (type === ComponentType.Lamp) { newComp.props.color = '#ffffaa'; newComp.props.resistance = 100; }
 
     let nextWires = [...wires];
@@ -864,7 +864,7 @@ const App: React.FC = () => {
               const rEq = safeI !== 0 ? V / safeI : Number.POSITIVE_INFINITY;
               if (component.type === ComponentType.LED) {
                   lines.push(
-                      `1) LED modelado por Shockley + resistência série interna e resistor externo em série (engine/analysis/circuitEngine.ts).`,
+                      `1) Polarização e linearização do LED calculadas pela engine canônica (engine/analysis/circuitEngine.ts).`,
                       `2) Queda medida no LED: ${fmt(V)} V`,
                       `3) Corrente medida no LED: ${fmt(I)} A`,
                       `4) Resistência equivalente no ponto de operação: ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
@@ -1020,7 +1020,7 @@ const App: React.FC = () => {
                   props = c.props.diodeType || 'Rectifier';
                   formula = 'Shockley Eq.';
               } else if (c.type === ComponentType.LED) {
-                  props = `Vmax = ${formatUnit(c.props.maxVoltage ?? c.props.voltageDrop ?? 2.2, 'V')} / If = ${formatUnit(c.props.currentRating ?? 0.01, 'A')} / Rserie = ${formatUnit(c.props.ledSeriesResistance ?? 330, 'Ω')}`;
+                  props = `Vmax = ${formatUnit(c.props.maxVoltage ?? c.props.voltageDrop ?? 2.2, 'V')} / If = ${formatUnit(c.props.currentRating ?? 0.01, 'A')}`;
                   formula = 'Modelo não linear via engine (V e I calculados pelo circuito)';
               }
 
