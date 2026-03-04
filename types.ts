@@ -1,6 +1,8 @@
 
 export enum ComponentType {
   Battery = 'battery',
+  VCC = 'vcc',
+  GND = 'gnd',
   Switch = 'switch',
   PushButton = 'pushbutton',
   Resistor = 'resistor',

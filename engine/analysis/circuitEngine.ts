@@ -112,7 +112,7 @@ const buildPortToNetMap = (components: EngineComponent[], wires: EngineWire[]): 
   const allPorts: string[] = [];
   components.forEach(c => {
     allPorts.push(`${c.id}_0`);
-    if (c.type !== 'junction') allPorts.push(`${c.id}_1`);
+    if (c.type !== 'junction' && c.type !== 'gnd' && c.type !== 'vcc') allPorts.push(`${c.id}_1`);
   });
 
   const parent = new Map<string, string>();
@@ -175,9 +175,11 @@ const buildPortToNetMap = (components: EngineComponent[], wires: EngineWire[]): 
 };
 
 export const solveCircuit = (components: EngineComponent[], wires: EngineWire[], dt = 0.1, simTime = 0): EngineSolveResult => {
-  const voltageSources = components.filter(c => c.type === 'battery' || c.type === 'ac_source');
+  const voltageSources = components.filter(c => c.type === 'battery' || c.type === 'ac_source' || c.type === 'vcc');
   const portToNet = buildPortToNetMap(components, wires);
   const netCount = new Set(portToNet.values()).size;
+  const preferredGround = components.find(c => c.type === 'gnd');
+  const groundNet = preferredGround ? (portToNet.get(`${preferredGround.id}_0`) ?? 0) : 0;
 
   const size = netCount + voltageSources.length;
   let sol = new Array(size).fill(0);
@@ -209,7 +211,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
     };
 
     components.forEach(c => {
-      if (c.type === 'junction') return;
+      if (c.type === 'junction' || c.type === 'gnd') return;
       const u = portToNet.get(`${c.id}_0`)!;
       const v = portToNet.get(`${c.id}_1`)!;
 
@@ -280,18 +282,22 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
         const freq = c.props.frequency || 60;
         const val = amp * Math.sin(2 * Math.PI * freq * simTime);
         stampVoltageSource(v, u, val, netCount + vsIdx, 0.1);
+      } else if (c.type === 'vcc') {
+        const vsIdx = voltageSources.findIndex(src => src.id === c.id);
+        const val = c.props.voltage || 5;
+        stampVoltageSource(u, groundNet, val, netCount + vsIdx, 0.05);
       }
     });
 
     for (let i = 0; i < netCount; i++) A.add(i, i, G_MIN);
     for (let j = 0; j < size; j++) {
-      if (j !== 0) {
-        A.set(0, j, 0);
-        A.set(j, 0, 0);
+      if (j !== groundNet) {
+        A.set(groundNet, j, 0);
+        A.set(j, groundNet, 0);
       }
     }
-    A.set(0, 0, 1);
-    B[0] = 0;
+    A.set(groundNet, groundNet, 1);
+    B[groundNet] = 0;
 
     const previousSol = sol;
     try {
@@ -321,7 +327,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
   });
 
   components.forEach(c => {
-    if (c.type === 'junction') return;
+    if (c.type === 'junction' || c.type === 'gnd') return;
     const u = portToNet.get(`${c.id}_0`)!;
     const v = portToNet.get(`${c.id}_1`)!;
 
@@ -329,7 +335,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
     let newCurrent = 0;
     const nextState: Partial<EngineSimData> = {};
 
-    if (c.type === 'battery' || c.type === 'ac_source') {
+    if (c.type === 'battery' || c.type === 'ac_source' || c.type === 'vcc') {
       const vsIdx = voltageSources.findIndex(bat => bat.id === c.id);
       newCurrent = -sol[netCount + vsIdx];
     } else if (c.type === 'capacitor' || c.type === 'capacitor_pol') {

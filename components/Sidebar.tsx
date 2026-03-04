@@ -13,6 +13,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPlace, isSimulating = false 
       name: "Basic Components",
       items: [
         { type: ComponentType.Battery, label: "DC Battery", icon: <><path d="M5,20 L17,20 M23,20 L35,20" /><path d="M17,15 L17,25" strokeWidth="3"/><path d="M23,10 L23,30" strokeWidth="1"/><path d="M26,12 L30,12 M28,10 L28,14" strokeWidth="1" stroke="#F27D26"/></> },
+        { type: ComponentType.VCC, label: "VCC", icon: <><path d="M20,34 L20,10" /><path d="M14,16 L20,8 L26,16" /><path d="M12,34 L28,34" /></> },
+        { type: ComponentType.GND, label: "GND", icon: <><path d="M20,6 L20,18" /><path d="M10,18 L30,18" /><path d="M13,23 L27,23" /><path d="M16,28 L24,28" /></> },
         { type: ComponentType.Switch, label: "Switch", icon: <><path d="M5,20 L12,20 M28,20 L35,20" /><path d="M12,20 L26,12" /><circle cx="12" cy="20" r="2"/><circle cx="28" cy="20" r="2"/></> },
         { type: ComponentType.PushButton, label: "Push Button", icon: <><path d="M5,25 L12,25 M28,25 L35,25 M12,25 L12,22 M28,25 L28,22" /><path d="M10,18 L30,18 M20,18 L20,12" /><circle cx="12" cy="25" r="2"/><circle cx="28" cy="25" r="2"/></> },
         { type: ComponentType.Resistor, label: "Resistor", icon: <path d="M5,20 L12,20 L14,14 L18,26 L22,14 L26,26 L28,20 L35,20" /> },
