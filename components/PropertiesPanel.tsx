@@ -409,51 +409,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
                   />
               </div>
               <div>
-                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Saturation Current Is (A)</label>
-                  <input
-                      type="number"
-                      min={1e-18}
-                      step={1e-12}
-                      value={comp.props.saturationCurrent ?? 2e-12}
-                      onChange={(e) => onUpdateCompProps(comp.id, { saturationCurrent: parseFloat(e.target.value) })}
-                      className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
-                  />
-              </div>
-              <div>
-                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Ideality Factor (n)</label>
-                  <input
-                      type="number"
-                      min={1}
-                      max={4}
-                      step={0.1}
-                      value={comp.props.idealityFactor ?? 2}
-                      onChange={(e) => onUpdateCompProps(comp.id, { idealityFactor: parseFloat(e.target.value) })}
-                      className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
-                  />
-              </div>
-              <div>
-                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Internal Series Rs (Ω)</label>
-                  <input
-                      type="number"
-                      min={0}
-                      step={0.1}
-                      value={comp.props.internalSeriesResistance ?? 2}
-                      onChange={(e) => onUpdateCompProps(comp.id, { internalSeriesResistance: parseFloat(e.target.value) })}
-                      className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
-                  />
-              </div>
-              <div>
-                  <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Series Resistor (Ω)</label>
-                  <input
-                      type="number"
-                      min={0.1}
-                      step={1}
-                      value={comp.props.ledSeriesResistance ?? 330}
-                      onChange={(e) => onUpdateCompProps(comp.id, { ledSeriesResistance: parseFloat(e.target.value) })}
-                      className="w-full bg-zinc-800 border border-zinc-700 text-white p-2 rounded text-xs font-mono focus:border-orange-500 outline-none"
-                  />
-              </div>
-              <div>
                   <label className="text-[10px] text-zinc-500 uppercase font-bold block mb-1">Failure Mode</label>
                   <select
                       value={comp.props.ledFailureMode || 'saturate'}
