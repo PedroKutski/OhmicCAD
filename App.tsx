@@ -867,13 +867,18 @@ const App: React.FC = () => {
               const rEq = safeI !== 0 ? V / safeI : Number.POSITIVE_INFINITY;
 
               if (component.type === ComponentType.LED) {
-                  const vFonte = Math.max(0, component.props.maxVoltage ?? component.props.voltageDrop ?? 2.2);
+                  const vFonte = Math.max(0, component.props.maxVoltage ?? 5);
+                  const vLedNominal = 2.2;
+                  const vResistor = Math.max(0, vFonte - vLedNominal);
+                  const iEstimado = Number.isFinite(rEq) && rEq > 0 ? vResistor / rEq : 0;
+                  const pEstimado = vLedNominal * iEstimado;
                   lines.push(
-                      `1) Queda no LED: Vled = V(anodo) - V(catodo) = ${fmt(V)} V`,
-                      `2) Corrente no LED: Iled = ${fmt(I)} A`,
-                      `3) Resistência equivalente no ponto de operação: R_eq = Vled/Iled = ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
-                      `4) Potência no LED: Pled = Vled × Iled = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`,
-                      `5) Referência de entrada (exemplo didático): Ventrada ≈ ${fmt(vFonte)} V para comparação com o ponto de operação calculado pela malha equivalente.`
+                      `1) Modelo simples: Vfonte, R_eq da malha e queda fixa do LED (2,2 V).`,
+                      `2) Queda no LED (nominal): Vled ≈ 2,2 V`,
+                      `3) Tensão no restante da malha: Vresto = Vfonte - Vled = (${fmt(vFonte)}) - 2,2 = ${fmt(vResistor)} V`,
+                      `4) Corrente estimada no LED: I ≈ Vresto / R_eq = ${fmt(iEstimado)} A`,
+                      `5) Potência no LED: P ≈ Vled × I = 2,2 × (${fmt(iEstimado)}) = ${fmt(pEstimado)} W`,
+                      `6) Ponto calculado pela simulação agora: Vled = ${fmt(V)} V, Iled = ${fmt(I)} A, Pled = ${fmt(V * I)} W`
                   );
               } else {
                   lines.push(
@@ -1024,7 +1029,7 @@ const App: React.FC = () => {
                   const vf = c.props.maxVoltage ?? c.props.voltageDrop ?? 2.2;
                   const imax = c.props.maxCurrentMa ?? Math.round((c.props.currentRating ?? 0.01) * 1000);
                   props = `Vf ≈ ${formatUnit(vf, 'V')} | If(max) = ${formatUnit(imax, 'mA')}`;
-                  formula = 'LED I-V + R_eq da malha';
+                  formula = 'I ≈ (Vfonte - 2,2)/R_eq';
               }
 
               return [
