@@ -7,11 +7,8 @@ export enum ComponentType {
   PushButton = 'pushbutton',
   Resistor = 'resistor',
   Capacitor = 'capacitor',
-  PolarizedCapacitor = 'capacitor_pol',
-  Inductor = 'inductor',
   ACSource = 'ac_source',
   Diode = 'diode',
-  LED = 'led',
   Lamp = 'lamp',
   Junction = 'junction',
 }

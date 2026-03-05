@@ -202,7 +202,8 @@ const App: React.FC = () => {
             }
             simTimeRef.current += dt;
 
-            activeComponentIds.forEach((compId) => {
+            activeComponentIds.forEach((rawCompId) => {
+                const compId = String(rawCompId);
                 const comp = componentsRef.current.find(c => c.id === compId);
                 if (!comp) return;
 
@@ -376,15 +377,12 @@ const App: React.FC = () => {
     switch (type) {
         case ComponentType.Resistor: prefix = 'R'; break;
         case ComponentType.Capacitor: 
-        case ComponentType.PolarizedCapacitor: prefix = 'C'; break;
-        case ComponentType.Inductor: prefix = 'L'; break;
         case ComponentType.ACSource: prefix = 'V'; break;
         case ComponentType.Battery:
         case ComponentType.VCC: prefix = 'V'; break;
         case ComponentType.Switch: 
         case ComponentType.PushButton: prefix = 'S'; break;
         case ComponentType.Diode:
-        case ComponentType.LED: prefix = 'D'; break;
         case ComponentType.Lamp: prefix = 'L'; break;
         case ComponentType.GND: prefix = 'G'; break;
         case ComponentType.Junction: prefix = 'J'; break;
@@ -410,11 +408,9 @@ const App: React.FC = () => {
     if (type === ComponentType.Battery) { newComp.props.voltage = 9; newComp.props.capacity = 1000; }
     else if (type === ComponentType.VCC) { newComp.props.voltage = 5; }
     else if (type === ComponentType.Resistor) { newComp.props.resistance = 1000; }
-    else if (type === ComponentType.Capacitor || type === ComponentType.PolarizedCapacitor) { newComp.props.capacitance = 10; newComp.props.capacitanceUnit = 'µF'; }
-    else if (type === ComponentType.Inductor) { newComp.props.inductance = 100e-3; }
+    else if (type === ComponentType.Capacitor) { newComp.props.capacitance = 10; newComp.props.capacitanceUnit = 'µF'; }
     else if (type === ComponentType.ACSource) { newComp.props.amplitude = 20; newComp.props.frequency = 60; }
     else if (type === ComponentType.Diode) { newComp.props.diodeType = 'rectifier'; }
-    else if (type === ComponentType.LED) { newComp.props.diodeType = 'led'; newComp.props.maxVoltage = 2.2; newComp.props.currentRating = 0.01; newComp.props.maxCurrentMa = 10; newComp.props.saturationCurrent = 5e-12; newComp.props.idealityFactor = 1.9; newComp.props.internalSeriesResistance = 1.5; newComp.props.ledBrightnessFactor = 1; newComp.props.ledFailureMode = 'saturate'; newComp.props.ledColor = '#ff4d4d'; }
     else if (type === ComponentType.Lamp) { newComp.props.color = '#ffffaa'; newComp.props.resistance = 100; }
 
     let nextWires = [...wires];
@@ -818,19 +814,13 @@ const App: React.FC = () => {
                   `   Substituindo: P = (${fmt(V)})² / (${fmt(R)})`,
                   `   Resultado: P = ${fmt(pFromV2R)} W`
               );
-          } else if (component.type === ComponentType.Capacitor || component.type === ComponentType.PolarizedCapacitor) {
+          } else if (component.type === ComponentType.Capacitor) {
               const charge = (component.props.capacitance || 0) * V;
               lines.push(
                   `1) Estado transitório calculado pela engine canônica (engine/analysis/circuitEngine.ts).`,
                   `2) Carga estimada para referência visual: Q = C × V`,
                   `   Substituindo: Q = (${fmt(component.props.capacitance || 0)}) × (${fmt(V)})`,
                   `   Resultado: Q = ${fmt(charge)} C`,
-                  `3) Potência instantânea monitorada: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
-              );
-          } else if (component.type === ComponentType.Inductor) {
-              lines.push(
-                  `1) Estado transitório calculado pela engine canônica (engine/analysis/circuitEngine.ts).`,
-                  `2) Indutância configurada: L = ${fmt(component.props.inductance || 0)} H`,
                   `3) Potência instantânea monitorada: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
           } else if (component.type === ComponentType.Battery || component.type === ComponentType.VCC || component.type === ComponentType.GND) {
@@ -859,25 +849,15 @@ const App: React.FC = () => {
                   `   Resultado: Vrms = ${fmt(vrms)} V`,
                   `4) Potência instantânea no passo atual: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
-          } else if (component.type === ComponentType.Diode || component.type === ComponentType.LED) {
+          } else if (component.type === ComponentType.Diode) {
               const safeI = Math.abs(I) > 1e-12 ? I : 0;
               const rEq = safeI !== 0 ? V / safeI : Number.POSITIVE_INFINITY;
-              if (component.type === ComponentType.LED) {
-                  lines.push(
-                      `1) LED modelado por Shockley + resistência série interna (engine/analysis/circuitEngine.ts).`,
-                      `2) Queda medida no LED: ${fmt(V)} V`,
-                      `3) Corrente medida no LED: ${fmt(I)} A`,
-                      `4) Resistência equivalente no ponto de operação: ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
-                      `5) Potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
-                  );
-              } else {
-                  lines.push(
-                      `1) Queda no diodo: Vd = V(anodo) - V(catodo) = ${fmt(V)} V`,
-                      `2) Corrente no diodo: Id = ${fmt(I)} A`,
-                      `3) Resistência equivalente no ponto de operação: R_eq = Vd/Id = ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
-                      `4) Potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
-                  );
-              }
+              lines.push(
+                  `1) Queda no diodo: Vd = V(anodo) - V(catodo) = ${fmt(V)} V`,
+                  `2) Corrente no diodo: Id = ${fmt(I)} A`,
+                  `3) Resistência equivalente no ponto de operação: R_eq = Vd/Id = ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
+                  `4) Potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
+              );
           } else {
               lines.push(
                   `1) Relação geral de potência: P = V × I`,
@@ -970,11 +950,9 @@ const App: React.FC = () => {
       const typeLabels: Record<string, string> = {
           [ComponentType.Resistor]: 'Resistors',
           [ComponentType.Capacitor]: 'Capacitors',
-          [ComponentType.Inductor]: 'Inductors',
           [ComponentType.Battery]: 'DC Sources',
           [ComponentType.ACSource]: 'AC Sources',
           [ComponentType.Diode]: 'Diodes',
-          [ComponentType.LED]: 'LEDs',
           [ComponentType.Switch]: 'Switches',
           [ComponentType.Lamp]: 'Lamps'
       };
@@ -1004,11 +982,8 @@ const App: React.FC = () => {
               if (c.type === ComponentType.Resistor) {
                   props = `R = ${formatUnit(c.props.resistance || 0, 'Ω')}`;
                   formula = 'V = I × R\nP = V × I';
-              } else if (c.type === ComponentType.Capacitor || c.type === ComponentType.PolarizedCapacitor) {
+              } else if (c.type === ComponentType.Capacitor) {
                   props = `C = ${formatUnit(c.props.capacitance || 0, 'F')}`;
-                  formula = 'Transitório via engine\nP = V × I';
-              } else if (c.type === ComponentType.Inductor) {
-                  props = `L = ${formatUnit(c.props.inductance || 0, 'H')}`;
                   formula = 'Transitório via engine\nP = V × I';
               } else if (c.type === ComponentType.Battery) {
                   props = `V = ${formatUnit(c.props.voltage || 0, 'V')}`;
@@ -1019,9 +994,6 @@ const App: React.FC = () => {
               } else if (c.type === ComponentType.Diode) {
                   props = c.props.diodeType || 'Rectifier';
                   formula = 'Shockley Eq.';
-              } else if (c.type === ComponentType.LED) {
-                  props = `Vmax = ${formatUnit(c.props.maxVoltage ?? c.props.voltageDrop ?? 2.2, 'V')} / If = ${formatUnit(c.props.currentRating ?? 0.01, 'A')}`;
-                  formula = 'Modelo não linear via engine (V e I calculados pelo circuito)';
               }
 
               return [

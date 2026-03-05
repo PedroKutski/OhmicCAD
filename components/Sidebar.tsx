@@ -19,8 +19,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPlace, isSimulating = false 
         { type: ComponentType.PushButton, label: "Push Button", icon: <><path d="M5,25 L12,25 M28,25 L35,25 M12,25 L12,22 M28,25 L28,22" /><path d="M10,18 L30,18 M20,18 L20,12" /><circle cx="12" cy="25" r="2"/><circle cx="28" cy="25" r="2"/></> },
         { type: ComponentType.Resistor, label: "Resistor", icon: <path d="M5,20 L12,20 L14,14 L18,26 L22,14 L26,26 L28,20 L35,20" /> },
         { type: ComponentType.Capacitor, label: "Capacitor", icon: <><path d="M5,20 L18,20 M22,20 L35,20" /><path d="M18,10 L18,30" /><path d="M22,10 L22,30" /></> },
-        { type: ComponentType.PolarizedCapacitor, label: "Cap (Pol)", icon: <><path d="M5,20 L17.5,20 M22.5,20 L35,20" /><path d="M17.5,12 L17.5,28" /><path d="M23.7,25.3 A7.5,7.5 0 0 1 23.7,14.7" fill="none" stroke="currentColor"/><path d="M11,12 L15,12 M13,10 L13,14" strokeWidth="1" stroke="#F27D26"/></> },
-        { type: ComponentType.Inductor, label: "Inductor", icon: <path d="M5,20 L10,20 Q12.5,10 15,20 Q17.5,10 20,20 Q22.5,10 25,20 Q27.5,10 30,20 L35,20" fill="none" /> },
         { type: ComponentType.ACSource, label: "AC Source", icon: <><circle cx="20" cy="20" r="10" /><path d="M15,20 Q17.5,15 20,20 T25,20" /></> },
       ]
     },
@@ -28,7 +26,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPlace, isSimulating = false 
       name: "Semiconductors & Output",
       items: [
         { type: ComponentType.Diode, label: "Diode", icon: <><path d="M5,20 L15,20 M25,20 L35,20" /><path d="M15,10 L15,30 L25,20 Z" fill="currentColor" /><path d="M25,10 L25,30" /></> },
-        { type: ComponentType.LED, label: "LED", icon: <><path d="M5,20 L15,20 M25,20 L35,20" /><path d="M15,10 L15,30 L25,20 Z" fill="none" /><path d="M25,10 L25,30" /><path d="M22,12 L28,6 M24,6 L28,6 L28,10" /><path d="M18,14 L24,8 M20,8 L24,8 L24,12" /></> },
         { type: ComponentType.Lamp, label: "Lamp", icon: <><path d="M5,20 L12,20 M28,20 L35,20" /><circle cx="20" cy="20" r="8" /><path d="M16,16 L24,24 M16,24 L24,16" /></> },
       ]
     }

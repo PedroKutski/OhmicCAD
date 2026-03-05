@@ -93,33 +93,9 @@ export const drawComponent = (
         break;
 
       case ComponentType.Capacitor:
-      case ComponentType.PolarizedCapacitor:
         ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-5, 0); ctx.moveTo(40, 0); ctx.lineTo(5, 0); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(-5, -15); ctx.lineTo(-5, 15); ctx.stroke();
-        if (c.type === ComponentType.PolarizedCapacitor) {
-            // Curved plate (negative) - concave towards the flat plate
-            ctx.beginPath(); ctx.arc(18, 0, 15, Math.PI * 0.75, Math.PI * 1.25); ctx.stroke();
-            // Plus sign near the positive terminal
-            ctx.strokeStyle = theme.accent; ctx.lineWidth = 1.5;
-            ctx.beginPath(); 
-            ctx.moveTo(-15, -15); ctx.lineTo(-9, -15); 
-            ctx.moveTo(-12, -18); ctx.lineTo(-12, -12); 
-            ctx.stroke();
-            ctx.strokeStyle = isSelected ? theme.selected : theme.componentStroke;
-        } else {
-            ctx.beginPath(); ctx.moveTo(5, -15); ctx.lineTo(5, 15); ctx.stroke();
-        }
-        break;
-
-      case ComponentType.Inductor:
-        ctx.beginPath();
-        ctx.moveTo(-40, 0); ctx.lineTo(-20, 0);
-        // Draw loops
-        for (let i = 0; i < 4; i++) {
-            ctx.arc(-15 + i * 10, 0, 5, Math.PI, 0); 
-        }
-        ctx.moveTo(20, 0); ctx.lineTo(40, 0);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(5, -15); ctx.lineTo(5, 15); ctx.stroke();
         break;
 
       case ComponentType.ACSource:
@@ -229,52 +205,6 @@ export const drawComponent = (
         break;
 
 
-      case ComponentType.LED:
-        // Terminals
-        ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-15, 0); ctx.moveTo(40, 0); ctx.lineTo(15, 0); ctx.stroke();
-
-        // Diode body
-        ctx.beginPath();
-        ctx.moveTo(-15, -15);
-        ctx.lineTo(-15, 15);
-        ctx.lineTo(15, 0);
-        ctx.closePath();
-        ctx.stroke();
-
-        // Cathode line
-        ctx.beginPath();
-        ctx.moveTo(15, -15); ctx.lineTo(15, 15);
-        ctx.stroke();
-
-        // Light arrows
-        const ledColor = c.props.ledColor || '#ff4d4d';
-        ctx.strokeStyle = ledColor;
-        ctx.beginPath();
-        ctx.moveTo(18, -8); ctx.lineTo(28, -18);
-        ctx.moveTo(25, -18); ctx.lineTo(28, -18); ctx.lineTo(28, -15);
-        ctx.moveTo(10, -2); ctx.lineTo(20, -12);
-        ctx.moveTo(17, -12); ctx.lineTo(20, -12); ctx.lineTo(20, -9);
-        ctx.stroke();
-
-        if (isSimulating) {
-            const intensity = Math.max(0, Math.min(1, c.simData.brightness ?? 0));
-            if (intensity > 1e-4 && !c.simData.isFailed) {
-                ctx.fillStyle = `rgba(255, 80, 80, ${0.15 + 0.45 * intensity})`;
-                ctx.shadowColor = ledColor;
-                ctx.shadowBlur = 18 * intensity;
-                ctx.beginPath();
-                ctx.moveTo(-15, -15);
-                ctx.lineTo(-15, 15);
-                ctx.lineTo(15, 0);
-                ctx.closePath();
-                ctx.fill();
-                ctx.shadowBlur = 0;
-            }
-        }
-
-        ctx.strokeStyle = isSelected ? theme.selected : theme.componentStroke;
-        break;
-
       case ComponentType.Lamp:
         // Terminals
         ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-20, 0); ctx.moveTo(40, 0); ctx.lineTo(20, 0); ctx.stroke();
@@ -316,7 +246,7 @@ export const drawComponent = (
         
         // Define internal paths for current flow
         if (c.type === ComponentType.Resistor || c.type === ComponentType.Battery || 
-            c.type === ComponentType.Capacitor || c.type === ComponentType.PolarizedCapacitor) {
+            c.type === ComponentType.Capacitor) {
             path = [{x: -40, y: 0}, {x: 40, y: 0}];
         } else if ((c.type === ComponentType.Switch || c.type === ComponentType.PushButton) && c.props.closed) {
              path = [{x: -40, y: 0}, {x: 40, y: 0}];
@@ -355,20 +285,16 @@ export const drawComponent = (
             valueStr = formatUnit(c.props.resistance, 'Ω');
         } else if (c.type === ComponentType.Battery && c.props.voltage !== undefined) {
             valueStr = formatUnit(c.props.voltage, 'V');
-        } else if ((c.type === ComponentType.Capacitor || c.type === ComponentType.PolarizedCapacitor) && c.props.capacitance !== undefined) {
+        } else if (c.type === ComponentType.Capacitor && c.props.capacitance !== undefined) {
             const unit = c.props.capacitanceUnit || 'µF';
             let mult = 1e-6;
             if (unit === 'mF') mult = 1e-3;
             if (unit === 'nF') mult = 1e-9;
             if (unit === 'pF') mult = 1e-12;
             valueStr = formatUnit(c.props.capacitance * mult, 'F');
-        } else if (c.type === ComponentType.Inductor && c.props.inductance !== undefined) {
-            valueStr = formatUnit(c.props.inductance, 'H');
         } else if (c.type === ComponentType.ACSource) {
             if (c.props.amplitude !== undefined) valueStr += formatUnit(c.props.amplitude, 'V');
             if (c.props.frequency !== undefined) valueStr += ` ${formatUnit(c.props.frequency, 'Hz')}`;
-        } else if (c.type === ComponentType.LED) {
-            valueStr = `V ${formatUnit(c.simData.voltage ?? 0, 'V')}`;
         }
         
         const text = `${label}   ${valueStr}`.trim();
