@@ -612,6 +612,83 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
   });
 
   const wireStates: Record<string, Partial<EngineSimData>> = {};
+
+  const solveWireCurrentsByNet = (): Map<string, number> => {
+    const solvedCurrents = new Map<string, number>();
+    const wiresByNet = new Map<number, EngineWire[]>();
+
+    wires.forEach(w => {
+      const netA = portToNet.get(`${w.compAId}_${w.portAIndex}`);
+      const netB = portToNet.get(`${w.compBId}_${w.portBIndex}`);
+      if (netA === undefined || netB === undefined || netA !== netB) return;
+      const bucket = wiresByNet.get(netA) || [];
+      bucket.push(w);
+      wiresByNet.set(netA, bucket);
+    });
+
+    wiresByNet.forEach(netWires => {
+      const ports = Array.from(new Set(netWires.flatMap(w => [`${w.compAId}_${w.portAIndex}`, `${w.compBId}_${w.portBIndex}`])));
+      if (ports.length < 2) {
+        netWires.forEach(w => solvedCurrents.set(w.id, 0));
+        return;
+      }
+
+      const portIndex = new Map(ports.map((port, index) => [port, index]));
+      const injections = ports.map(port => portCurrents.get(port) || 0);
+      const avgInjection = injections.reduce((sum, i) => sum + i, 0) / injections.length;
+      const balancedInjections = injections.map(i => i - avgInjection);
+
+      const sizeNet = ports.length;
+      const A = new SparseMatrix(sizeNet);
+      const B = Array(sizeNet).fill(0);
+
+      netWires.forEach(w => {
+        const a = portIndex.get(`${w.compAId}_${w.portAIndex}`);
+        const b = portIndex.get(`${w.compBId}_${w.portBIndex}`);
+        if (a === undefined || b === undefined || a === b) return;
+        A.add(a, a, 1);
+        A.add(b, b, 1);
+        A.add(a, b, -1);
+        A.add(b, a, -1);
+      });
+
+      for (let i = 0; i < sizeNet; i++) B[i] = balancedInjections[i];
+
+      const referenceNode = 0;
+      for (let j = 0; j < sizeNet; j++) {
+        if (j !== referenceNode) {
+          A.set(referenceNode, j, 0);
+          A.set(j, referenceNode, 0);
+        }
+      }
+      A.set(referenceNode, referenceNode, 1);
+      B[referenceNode] = 0;
+
+      let nodePotentials = Array(sizeNet).fill(0);
+      try {
+        nodePotentials = A.solve(B);
+      } catch {
+        // Fallback: if the per-net solve fails, keep currents at 0 for this net.
+        netWires.forEach(w => solvedCurrents.set(w.id, 0));
+        return;
+      }
+
+      netWires.forEach(w => {
+        const a = portIndex.get(`${w.compAId}_${w.portAIndex}`);
+        const b = portIndex.get(`${w.compBId}_${w.portBIndex}`);
+        if (a === undefined || b === undefined) {
+          solvedCurrents.set(w.id, 0);
+          return;
+        }
+        solvedCurrents.set(w.id, nodePotentials[a] - nodePotentials[b]);
+      });
+    });
+
+    return solvedCurrents;
+  };
+
+  const solvedWireCurrents = solveWireCurrentsByNet();
+
   wires.forEach(w => {
     const u = portToNet.get(`${w.compAId}_${w.portAIndex}`);
     const v = portToNet.get(`${w.compBId}_${w.portBIndex}`);
@@ -621,11 +698,7 @@ export const solveCircuit = (components: EngineComponent[], wires: EngineWire[],
     const wireVoltage = Math.abs(sol[u] - sol[v]);
     const portA = `${w.compAId}_${w.portAIndex}`;
     const portB = `${w.compBId}_${w.portBIndex}`;
-    const degreeA = Math.max(1, portWireDegree.get(portA) || 1);
-    const degreeB = Math.max(1, portWireDegree.get(portB) || 1);
-    const estimateFromA = (portCurrents.get(portA) || 0) / degreeA;
-    const estimateFromB = -(portCurrents.get(portB) || 0) / degreeB;
-    const estimatedWireCurrent = (estimateFromA + estimateFromB) / 2;
+    const estimatedWireCurrent = solvedWireCurrents.get(w.id) || 0;
     const wireCurrent = w.simData.current * (1 - alpha) + estimatedWireCurrent * alpha;
 
     wireStates[w.id] = {
