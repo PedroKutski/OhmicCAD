@@ -490,6 +490,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ target, onUpda
     if (type === ComponentType.Resistor) return renderResistorProps();
     if (type === ComponentType.Capacitor) return renderCapacitorProps();
     if (type === ComponentType.Diode) return renderDiodeProps();
+    if (type === ComponentType.LED) return renderLedProps();
     if (type === ComponentType.Lamp) return renderLightProps();
     return renderGenericComponentProps();
   };

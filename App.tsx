@@ -383,6 +383,7 @@ const App: React.FC = () => {
         case ComponentType.Switch: 
         case ComponentType.PushButton: prefix = 'S'; break;
         case ComponentType.Diode:
+        case ComponentType.LED:
         case ComponentType.Lamp: prefix = 'L'; break;
         case ComponentType.GND: prefix = 'G'; break;
         case ComponentType.Junction: prefix = 'J'; break;
@@ -411,6 +412,18 @@ const App: React.FC = () => {
     else if (type === ComponentType.Capacitor) { newComp.props.capacitance = 10; newComp.props.capacitanceUnit = 'µF'; }
     else if (type === ComponentType.ACSource) { newComp.props.amplitude = 20; newComp.props.frequency = 60; }
     else if (type === ComponentType.Diode) { newComp.props.diodeType = 'rectifier'; }
+    else if (type === ComponentType.LED) {
+      newComp.props.diodeType = 'led';
+      newComp.props.maxVoltage = 2.2;
+      newComp.props.maxCurrentMa = 10;
+      newComp.props.currentRating = 0.01;
+      newComp.props.saturationCurrent = 5e-12;
+      newComp.props.idealityFactor = 1.9;
+      newComp.props.internalSeriesResistance = 1.5;
+      newComp.props.ledBrightnessFactor = 1;
+      newComp.props.ledFailureMode = 'saturate';
+      newComp.props.ledColor = '#ff4d4d';
+    }
     else if (type === ComponentType.Lamp) { newComp.props.color = '#ffffaa'; newComp.props.resistance = 100; }
 
     let nextWires = [...wires];
@@ -849,15 +862,27 @@ const App: React.FC = () => {
                   `   Resultado: Vrms = ${fmt(vrms)} V`,
                   `4) Potência instantânea no passo atual: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
               );
-          } else if (component.type === ComponentType.Diode) {
+          } else if (component.type === ComponentType.Diode || component.type === ComponentType.LED) {
               const safeI = Math.abs(I) > 1e-12 ? I : 0;
               const rEq = safeI !== 0 ? V / safeI : Number.POSITIVE_INFINITY;
-              lines.push(
-                  `1) Queda no diodo: Vd = V(anodo) - V(catodo) = ${fmt(V)} V`,
-                  `2) Corrente no diodo: Id = ${fmt(I)} A`,
-                  `3) Resistência equivalente no ponto de operação: R_eq = Vd/Id = ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
-                  `4) Potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
-              );
+
+              if (component.type === ComponentType.LED) {
+                  const vFonte = Math.max(0, component.props.maxVoltage ?? component.props.voltageDrop ?? 2.2);
+                  lines.push(
+                      `1) Queda no LED: Vled = V(anodo) - V(catodo) = ${fmt(V)} V`,
+                      `2) Corrente no LED: Iled = ${fmt(I)} A`,
+                      `3) Resistência equivalente no ponto de operação: R_eq = Vled/Iled = ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
+                      `4) Potência no LED: Pled = Vled × Iled = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`,
+                      `5) Referência de entrada (exemplo didático): Ventrada ≈ ${fmt(vFonte)} V para comparação com o ponto de operação calculado pela malha equivalente.`
+                  );
+              } else {
+                  lines.push(
+                      `1) Queda no diodo: Vd = V(anodo) - V(catodo) = ${fmt(V)} V`,
+                      `2) Corrente no diodo: Id = ${fmt(I)} A`,
+                      `3) Resistência equivalente no ponto de operação: R_eq = Vd/Id = ${Number.isFinite(rEq) ? `${fmt(rEq)} Ω` : '∞ Ω (bloqueado)'}`,
+                      `4) Potência instantânea: P = V × I = (${fmt(V)}) × (${fmt(I)}) = ${fmt(V * I)} W`
+                  );
+              }
           } else {
               lines.push(
                   `1) Relação geral de potência: P = V × I`,
@@ -953,6 +978,7 @@ const App: React.FC = () => {
           [ComponentType.Battery]: 'DC Sources',
           [ComponentType.ACSource]: 'AC Sources',
           [ComponentType.Diode]: 'Diodes',
+          [ComponentType.LED]: 'LEDs',
           [ComponentType.Switch]: 'Switches',
           [ComponentType.Lamp]: 'Lamps'
       };
@@ -994,6 +1020,11 @@ const App: React.FC = () => {
               } else if (c.type === ComponentType.Diode) {
                   props = c.props.diodeType || 'Rectifier';
                   formula = 'Shockley Eq.';
+              } else if (c.type === ComponentType.LED) {
+                  const vf = c.props.maxVoltage ?? c.props.voltageDrop ?? 2.2;
+                  const imax = c.props.maxCurrentMa ?? Math.round((c.props.currentRating ?? 0.01) * 1000);
+                  props = `Vf ≈ ${formatUnit(vf, 'V')} | If(max) = ${formatUnit(imax, 'mA')}`;
+                  formula = 'LED I-V + R_eq da malha';
               }
 
               return [
