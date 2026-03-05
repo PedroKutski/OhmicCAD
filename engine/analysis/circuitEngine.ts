@@ -7,8 +7,8 @@ const MAX_ITERATIONS = 50;
 const NEWTON_TOLERANCE = 1e-9;
 const LED_OFF_G = 1e-12;
 const LED_EMISSION_EPSILON = 1e-12;
-const DEFAULT_LED_INTERNAL_RS = 15;
-const DEFAULT_LED_VF = 2.2;
+const DEFAULT_LED_INTERNAL_RS = 0;
+const DEFAULT_LED_VF = 1.66;
 
 export interface EngineSimData {
   voltage: number;
@@ -74,7 +74,7 @@ const getLedModelParams = (c: EngineComponent): LedModelParams => {
   const ifMax = Math.max(1e-9, c.props.currentRating ?? ((c.props.maxCurrentMa ?? 20) / 1000));
   const failureMode: 'saturate' | 'burn_open' = c.props.ledFailureMode === 'burn_open' ? 'burn_open' : 'saturate';
   const brightnessFactor = Math.max(0, c.props.ledBrightnessFactor ?? 1);
-  const forwardVoltage = Math.max(1.2, c.props.voltageDrop ?? DEFAULT_LED_VF);
+  const forwardVoltage = Math.max(1.2, c.props.voltageDrop ?? c.props.maxVoltage ?? DEFAULT_LED_VF);
   const internalSeriesResistance = Math.max(0, c.props.internalSeriesResistance ?? DEFAULT_LED_INTERNAL_RS);
 
   return {
