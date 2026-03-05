@@ -26,6 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPlace, isSimulating = false 
       name: "Semiconductors & Output",
       items: [
         { type: ComponentType.Diode, label: "Diode", icon: <><path d="M5,20 L15,20 M25,20 L35,20" /><path d="M15,10 L15,30 L25,20 Z" fill="currentColor" /><path d="M25,10 L25,30" /></> },
+        { type: ComponentType.LED, label: "LED", icon: <><path d="M5,20 L15,20 M25,20 L35,20" /><path d="M15,10 L15,30 L25,20 Z" fill="currentColor" /><path d="M25,10 L25,30" /><path d="M27,13 L33,7 M31,7 L33,7 L33,9" /><path d="M27,27 L33,21 M31,21 L33,21 L33,23" /></> },
         { type: ComponentType.Lamp, label: "Lamp", icon: <><path d="M5,20 L12,20 M28,20 L35,20" /><circle cx="20" cy="20" r="8" /><path d="M16,16 L24,24 M16,24 L24,16" /></> },
       ]
     }

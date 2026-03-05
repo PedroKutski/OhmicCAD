@@ -9,6 +9,7 @@ export enum ComponentType {
   Capacitor = 'capacitor',
   ACSource = 'ac_source',
   Diode = 'diode',
+  LED = 'led',
   Lamp = 'lamp',
   Junction = 'junction',
 }

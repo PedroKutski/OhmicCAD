@@ -205,6 +205,46 @@ export const drawComponent = (
         break;
 
 
+
+      case ComponentType.LED:
+        // Terminals
+        ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-15, 0); ctx.moveTo(40, 0); ctx.lineTo(15, 0); ctx.stroke();
+
+        // Diode body
+        ctx.beginPath();
+        ctx.moveTo(-15, -15);
+        ctx.lineTo(-15, 15);
+        ctx.lineTo(15, 0);
+        ctx.closePath();
+        ctx.stroke();
+
+        // Cathode line
+        ctx.beginPath();
+        ctx.moveTo(15, -15); ctx.lineTo(15, 15);
+        ctx.stroke();
+
+        // Light arrows
+        ctx.beginPath();
+        ctx.moveTo(20, -10); ctx.lineTo(30, -20); ctx.moveTo(27, -20); ctx.lineTo(30, -20); ctx.lineTo(30, -17);
+        ctx.moveTo(20, 10); ctx.lineTo(30, 0); ctx.moveTo(27, 0); ctx.lineTo(30, 0); ctx.lineTo(30, 3);
+        ctx.stroke();
+
+        if (isSimulating) {
+            const brightness = Math.max(0, Math.min(1, c.simData.brightness ?? 0));
+            if (brightness > 0.001) {
+                const glowColor = c.props.ledColor || '#ff4d4d';
+                ctx.save();
+                ctx.shadowColor = glowColor;
+                ctx.shadowBlur = 12 + (28 * brightness);
+                ctx.fillStyle = `${glowColor}${Math.round(120 + brightness * 100).toString(16).padStart(2, '0')}`;
+                ctx.beginPath();
+                ctx.arc(0, 0, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+        break;
+
       case ComponentType.Lamp:
         // Terminals
         ctx.beginPath(); ctx.moveTo(-40, 0); ctx.lineTo(-20, 0); ctx.moveTo(40, 0); ctx.lineTo(20, 0); ctx.stroke();
@@ -246,7 +286,7 @@ export const drawComponent = (
         
         // Define internal paths for current flow
         if (c.type === ComponentType.Resistor || c.type === ComponentType.Battery || 
-            c.type === ComponentType.Capacitor) {
+            c.type === ComponentType.Capacitor || c.type === ComponentType.LED || c.type === ComponentType.Diode) {
             path = [{x: -40, y: 0}, {x: 40, y: 0}];
         } else if ((c.type === ComponentType.Switch || c.type === ComponentType.PushButton) && c.props.closed) {
              path = [{x: -40, y: 0}, {x: 40, y: 0}];
