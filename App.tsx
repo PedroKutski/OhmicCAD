@@ -414,12 +414,12 @@ const App: React.FC = () => {
     else if (type === ComponentType.Diode) { newComp.props.diodeType = 'rectifier'; }
     else if (type === ComponentType.LED) {
       newComp.props.diodeType = 'led';
-      newComp.props.maxVoltage = 2.2;
+      newComp.props.maxVoltage = 1.66;
       newComp.props.maxCurrentMa = 10;
       newComp.props.currentRating = 0.01;
       newComp.props.saturationCurrent = 5e-12;
       newComp.props.idealityFactor = 1.9;
-      newComp.props.internalSeriesResistance = 1.5;
+      newComp.props.internalSeriesResistance = 0;
       newComp.props.ledBrightnessFactor = 1;
       newComp.props.ledFailureMode = 'saturate';
       newComp.props.ledColor = '#ff4d4d';
