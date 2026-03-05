@@ -302,11 +302,6 @@ export const CircuitCanvas = forwardRef<CircuitCanvasHandle, CircuitCanvasProps>
 
             if (!('type' in target)) {
                 // For wires, display only current as requested.
-            } else if ((target as ComponentModel).type === ComponentType.Inductor) {
-                 lines.push(`Vd = ${formatUnit(target.simData.voltage, 'V')}`);
-                 if ((target as ComponentModel).props.inductance !== undefined) {
-                     lines.push(`L = ${formatUnit((target as ComponentModel).props.inductance!, 'H')}`);
-                 }
             } else {
                  // Voltage Drop
                  lines.push(`V = ${formatUnit(target.simData.voltage, 'V')}`);

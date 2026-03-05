@@ -64,47 +64,6 @@ const genCapacitorTiming = (): CircuitData => ({
     ]
 });
 
-const genInductorFilter = (): CircuitData => ({
-    components: [
-        { id: 'V1', type: ComponentType.Battery, x: 90, y: 220, rotation: 3, state: false, props: { name: 'V1', voltage: 12 }, simData: { ...emptySim } },
-        { id: 'L1', type: ComponentType.Inductor, x: 250, y: 170, rotation: 1, state: false, props: { name: 'L1', inductance: 0.1 }, simData: { ...emptySim } },
-        { id: 'R1', type: ComponentType.Resistor, x: 250, y: 270, rotation: 1, state: false, props: { name: 'R1', resistance: 47 }, simData: { ...emptySim } }
-    ],
-    wires: [
-        { id: 'w1', compAId: 'V1', portAIndex: 1, compBId: 'L1', portBIndex: 0, anchor: null, path: [{x: 90, y: 180}, {x: 250, y: 130}], selected: false, simData: { ...emptySim }, props: { name: 'w1' } },
-        { id: 'w2', compAId: 'L1', portAIndex: 1, compBId: 'R1', portBIndex: 0, anchor: null, path: [{x: 250, y: 220}], selected: false, simData: { ...emptySim }, props: { name: 'w2' } },
-        { id: 'w3', compAId: 'R1', portAIndex: 1, compBId: 'V1', portBIndex: 0, anchor: null, path: [{x: 250, y: 310}, {x: 90, y: 260}], selected: false, simData: { ...emptySim }, props: { name: 'w3' } }
-    ]
-});
-
-const genRlcSeries = (): CircuitData => ({
-    components: [
-        { id: 'VAC1', type: ComponentType.ACSource, x: 80, y: 220, rotation: 3, state: false, props: { name: 'VAC1', amplitude: 5, frequency: 1000 }, simData: { ...emptySim } },
-        { id: 'R1', type: ComponentType.Resistor, x: 200, y: 220, rotation: 1, state: false, props: { name: 'R1', resistance: 100 }, simData: { ...emptySim } },
-        { id: 'L1', type: ComponentType.Inductor, x: 320, y: 220, rotation: 1, state: false, props: { name: 'L1', inductance: 0.05 }, simData: { ...emptySim } },
-        { id: 'C1', type: ComponentType.Capacitor, x: 440, y: 220, rotation: 1, state: false, props: { name: 'C1', capacitance: 1, capacitanceUnit: 'µF' }, simData: { ...emptySim } }
-    ],
-    wires: [
-        { id: 'w1', compAId: 'VAC1', portAIndex: 1, compBId: 'R1', portBIndex: 0, anchor: null, path: [{x: 80, y: 180}, {x: 200, y: 180}], selected: false, simData: { ...emptySim }, props: { name: 'w1' } },
-        { id: 'w2', compAId: 'R1', portAIndex: 1, compBId: 'L1', portBIndex: 0, anchor: null, path: [{x: 260, y: 220}], selected: false, simData: { ...emptySim }, props: { name: 'w2' } },
-        { id: 'w3', compAId: 'L1', portAIndex: 1, compBId: 'C1', portBIndex: 0, anchor: null, path: [{x: 380, y: 220}], selected: false, simData: { ...emptySim }, props: { name: 'w3' } },
-        { id: 'w4', compAId: 'C1', portAIndex: 1, compBId: 'VAC1', portBIndex: 0, anchor: null, path: [{x: 440, y: 260}, {x: 80, y: 260}], selected: false, simData: { ...emptySim }, props: { name: 'w4' } }
-    ]
-});
-
-const genLedOn = (): CircuitData => ({
-    components: [
-        { id: 'V1', type: ComponentType.Battery, x: 100, y: 220, rotation: 3, state: false, props: { name: 'V1', voltage: 9 }, simData: { ...emptySim } },
-        { id: 'R1', type: ComponentType.Resistor, x: 260, y: 180, rotation: 1, state: false, props: { name: 'R1', resistance: 330 }, simData: { ...emptySim } },
-        { id: 'LED1', type: ComponentType.LED, x: 260, y: 280, rotation: 1, state: false, props: { name: 'LED1', diodeType: 'led', voltageDrop: 1.73, currentRating: 0.01, maxCurrentMa: 10, ledBrightnessFactor: 1, ledFailureMode: 'saturate', ledColor: '#ff4d4d' }, simData: { ...emptySim } }
-    ],
-    wires: [
-        { id: 'w1', compAId: 'V1', portAIndex: 1, compBId: 'R1', portBIndex: 0, anchor: null, path: [{x: 100, y: 180}, {x: 260, y: 140}], selected: false, simData: { ...emptySim }, props: { name: 'w1' } },
-        { id: 'w2', compAId: 'R1', portAIndex: 1, compBId: 'LED1', portBIndex: 0, anchor: null, path: [{x: 260, y: 230}], selected: false, simData: { ...emptySim }, props: { name: 'w2' } },
-        { id: 'w3', compAId: 'LED1', portAIndex: 1, compBId: 'V1', portBIndex: 0, anchor: null, path: [{x: 260, y: 320}, {x: 100, y: 260}], selected: false, simData: { ...emptySim }, props: { name: 'w3' } }
-    ]
-});
-
 export const CIRCUIT_LIBRARY: CircuitCategory[] = [
     {
         name: "Basics",
@@ -112,9 +71,6 @@ export const CIRCUIT_LIBRARY: CircuitCategory[] = [
             { name: "Ohm's Law", id: "ohms", data: genOhmsLaw, usageHint: "Ajuste V1 e R1 para praticar V = I × R e observar a corrente resultante." },
             { name: "Resistors", id: "resistors", data: genResistorDivider, usageHint: 'Divisor resistivo: ajuste R1 e R2 para observar Vout = Vin × (R2/(R1+R2)).' },
             { name: "Capacitor", id: "cap", data: genCapacitorTiming, usageHint: 'Exemplo RC: altere R ou C para aumentar/diminuir o tempo de carga do capacitor.' },
-            { name: "Inductor", id: "induct", data: genInductorFilter, usageHint: 'Exemplo RL: aumente L para desacelerar a variação de corrente.' },
-            { name: "LRC Circuit", id: "lrc", data: genRlcSeries, usageHint: 'RLC série: mude a frequência da fonte AC para ver a região de ressonância.' },
-            { name: "LED On", id: "led-on", data: genLedOn, usageHint: 'LED com resistor limitador: ajuste R1 para manter corrente segura (~20 mA).' },
             { name: "Voltage Divider", id: "voltdivide" },
             { name: "Potentiometer", id: "pot" },
             { name: "Potentiometer Divider", id: "potdivide" },
